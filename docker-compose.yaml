@@ -1,0 +1,45 @@
+# ==============================================================================
+# KroClaude — Quick Start
+#   docker compose up -d
+#   docker exec -it kroclaude bash
+# Authoritative env-var contract: specs/001-claude-shell-base/contracts/compose-environment.md
+# ==============================================================================
+
+services:
+  kroclaude:
+    build:
+      context: .
+    image: kroclaude:dev
+    container_name: kroclaude
+    hostname: kroclaude
+    restart: unless-stopped
+    shm_size: 2g
+
+    # FR-003b: headless Chromium needs SYS_ADMIN + SYS_PTRACE for its
+    # namespace/sandbox model. NOT a blanket privileged-mode shortcut.
+    cap_add:
+      - SYS_ADMIN   # FR-003b — Chromium sandbox
+      - SYS_PTRACE  # FR-003b — Chromium debugger probes
+    # FR-003b: relax seccomp for Chromium's syscall set on Bookworm.
+    security_opt:
+      - seccomp=unconfined  # FR-003b — Chromium
+
+    environment:
+      # Required (no default — set in .env or Coolify secret).
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      # Optional runtime configuration.
+      TZ: "${TZ:-UTC}"
+      GIT_USER_NAME: "${GIT_USER_NAME:-}"
+      GIT_USER_EMAIL: "${GIT_USER_EMAIL:-}"
+      NODE_OPTIONS: "${NODE_OPTIONS:-}"
+      # Optional notifications (Apprise URLs). Off unless the in-container
+      # sentinel /home/claude/.claude/notify-on also exists.
+      NOTIFY_URLS: "${NOTIFY_URLS:-}"
+
+    volumes:
+      - kroclaude-config:/home/claude/.claude
+      - kroclaude-workspace:/workspace
+
+volumes:
+  kroclaude-config:
+  kroclaude-workspace:

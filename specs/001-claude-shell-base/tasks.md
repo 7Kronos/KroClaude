@@ -39,11 +39,11 @@ There is no `src/`, no `backend/`, no `frontend/`. This is a deployment artifact
 
 **Purpose**: scaffold the repo so foundational and story-phase tasks have somewhere to write files.
 
-- [ ] T001 Create directory layout per [plan.md §Project Structure](plan.md): `scripts/`, `s6-overlay/s6-rc.d/xvfb/`, `s6-overlay/s6-rc.d/user/contents.d/`, `config/`, `tests/smoke/`, `.github/workflows/` at repo root
-- [ ] T002 [P] Write `.gitignore` covering `.env`, `credentials*`, `node_modules/`, `__pycache__/`, `*.swp`, `.DS_Store`, `data/`, `docker-compose.override.y*ml`
-- [ ] T003 [P] Write `.dockerignore` covering `.git/`, `.github/`, `README.md`, `LICENSE`, `specs/`, `tests/`, `.env`, `data/`, `.idea/`, `.vscode/`, `*.swp`, `.DS_Store`
-- [ ] T004 [P] Write `.env.example` documenting only the variables in [contracts/compose-environment.md](contracts/compose-environment.md): `ANTHROPIC_API_KEY=` (required, no value), `TZ=UTC`, `GIT_USER_NAME=`, `GIT_USER_EMAIL=`, `NODE_OPTIONS=`, `NOTIFY_URLS=`. **Do NOT include** `PUID`, `PGID`, `VARIANT`, `HOLYCLAUDE_*` (per Q3, Q4 clarifications and FR-004)
-- [ ] T005 [P] Write minimal `README.md` at repo root: project name, one-paragraph description, link to [specs/001-claude-shell-base/quickstart.md](specs/001-claude-shell-base/quickstart.md), HolyClaude attribution (per Constitution §Build/Release/Workflow). Do not document features (FR-013 keeps manuals out of scope)
+- [x] T001 Create directory layout per [plan.md §Project Structure](plan.md): `scripts/`, `s6-overlay/s6-rc.d/xvfb/`, `s6-overlay/s6-rc.d/user/contents.d/`, `config/`, `tests/smoke/`, `.github/workflows/` at repo root
+- [x] T002 [P] Write `.gitignore` covering `.env`, `credentials*`, `node_modules/`, `__pycache__/`, `*.swp`, `.DS_Store`, `data/`, `docker-compose.override.y*ml`
+- [x] T003 [P] Write `.dockerignore` covering `.git/`, `.github/`, `README.md`, `LICENSE`, `specs/`, `tests/`, `.env`, `data/`, `.idea/`, `.vscode/`, `*.swp`, `.DS_Store`
+- [x] T004 [P] Write `.env.example` documenting only the variables in [contracts/compose-environment.md](contracts/compose-environment.md): `ANTHROPIC_API_KEY=` (required, no value), `TZ=UTC`, `GIT_USER_NAME=`, `GIT_USER_EMAIL=`, `NODE_OPTIONS=`, `NOTIFY_URLS=`. **Do NOT include** `PUID`, `PGID`, `VARIANT`, `HOLYCLAUDE_*` (per Q3, Q4 clarifications and FR-004)
+- [x] T005 [P] Write minimal `README.md` at repo root: project name, one-paragraph description, link to [specs/001-claude-shell-base/quickstart.md](specs/001-claude-shell-base/quickstart.md), HolyClaude attribution (per Constitution §Build/Release/Workflow). Do not document features (FR-013 keeps manuals out of scope)
 
 ---
 
@@ -55,40 +55,40 @@ There is no `src/`, no `backend/`, no `frontend/`. This is a deployment artifact
 
 ### Dockerfile core
 
-- [ ] T006 In `Dockerfile`: `FROM node:22-bookworm-slim`, set `ARG S6_OVERLAY_VERSION=3.2.0.2`, `ARG TARGETARCH`, `LABEL org.opencontainers.image.source=...`, set `ENV DEBIAN_FRONTEND=noninteractive LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 DISPLAY=:99 DBUS_SESSION_BUS_ADDRESS=disabled: CHROMIUM_FLAGS="--no-sandbox --disable-gpu --disable-dev-shm-usage" CHROME_PATH=/usr/bin/chromium PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`. Pin base by digest at release time (research R5)
-- [ ] T007 In `Dockerfile`: install s6-overlay v3 with checksum-verified tarballs, multi-arch via `TARGETARCH` (research R8). Install `xz-utils`, `curl`, `ca-certificates` first; download and extract noarch + arch-specific tarballs; rm tarballs
-- [ ] T008 In `Dockerfile`: install all FR-003 apt packages in one `apt-get install` layer — shell core (`git curl wget jq ripgrep fd-find unzip zip tree tmux fzf bat sudo bubblewrap`), build & language (`build-essential pkg-config python3 python3-pip python3-venv`), browser stack (`chromium xvfb fonts-liberation2 fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji`), locale (`locales`), debugging (`strace lsof iproute2 procps htop`), DB clients (`postgresql-client redis-tools sqlite3`), media (`imagemagick ffmpeg`), SSH client (`openssh-client`); `chmod u+s /usr/bin/bwrap` for Codex sandbox; `rm -rf /var/lib/apt/lists/*`
-- [ ] T009 In `Dockerfile`: install GitHub CLI from `cli.github.com` keyring (matches HolyClaude lines 82–86)
-- [ ] T010 In `Dockerfile`: symlink `/usr/bin/batcat` → `/usr/local/bin/bat`; run `sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen`
-- [ ] T011 In `Dockerfile`: rename base-image `node` user → `claude` at UID/GID 1000 (`usermod -l claude -d /home/claude -m node && groupmod -n claude node`); add NOPASSWD sudoers line for `claude`; `WORKDIR /workspace` and `chown` it to `claude`
-- [ ] T012 In `Dockerfile`: install Claude Code CLI (FR-002) — `USER claude`, `RUN curl -fsSL https://claude.ai/install.sh | bash`, `USER root`, `ENV PATH="/home/claude/.local/bin:${PATH}"` (research R5)
-- [ ] T013 [P] In `Dockerfile`: install npm globals per FR-003 — `npm i -g typescript tsx pnpm vite esbuild eslint prettier serve nodemon concurrently dotenv-cli lighthouse @google/gemini-cli @openai/codex` (FR-003 + FR-003a; explicit non-inclusion of `task-master-ai`, `cursor`, `junie`, `opencode-ai`, `wrangler`, `vercel`, `netlify-cli`, `pm2`, `prisma`, `drizzle-kit`, `eas-cli`, `@lhci/cli`, `sharp-cli`, `json-server`, `http-server`, `@marp-team/marp-cli`, `@cloudflare/next-on-pages`)
-- [ ] T014 [P] In `Dockerfile`: install pip packages with `--break-system-packages` per FR-003 — `requests httpx beautifulsoup4 lxml Pillow pandas numpy openpyxl python-docx jinja2 pyyaml python-dotenv markdown rich click tqdm playwright apprise xlsxwriter` (explicit non-inclusion of `reportlab weasyprint cairosvg fpdf2 PyMuPDF pdfkit img2pdf xlrd matplotlib seaborn python-pptx fastapi uvicorn httpie`)
+- [x] T006 In `Dockerfile`: `FROM node:22-bookworm-slim`, set `ARG S6_OVERLAY_VERSION=3.2.0.2`, `ARG TARGETARCH`, `LABEL org.opencontainers.image.source=...`, set `ENV DEBIAN_FRONTEND=noninteractive LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 DISPLAY=:99 DBUS_SESSION_BUS_ADDRESS=disabled: CHROMIUM_FLAGS="--no-sandbox --disable-gpu --disable-dev-shm-usage" CHROME_PATH=/usr/bin/chromium PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`. Pin base by digest at release time (research R5)
+- [x] T007 In `Dockerfile`: install s6-overlay v3 with checksum-verified tarballs, multi-arch via `TARGETARCH` (research R8). Install `xz-utils`, `curl`, `ca-certificates` first; download and extract noarch + arch-specific tarballs; rm tarballs
+- [x] T008 In `Dockerfile`: install all FR-003 apt packages in one `apt-get install` layer — shell core (`git curl wget jq ripgrep fd-find unzip zip tree tmux fzf bat sudo bubblewrap`), build & language (`build-essential pkg-config python3 python3-pip python3-venv`), browser stack (`chromium xvfb fonts-liberation2 fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji`), locale (`locales`), debugging (`strace lsof iproute2 procps htop`), DB clients (`postgresql-client redis-tools sqlite3`), media (`imagemagick ffmpeg`), SSH client (`openssh-client`); `chmod u+s /usr/bin/bwrap` for Codex sandbox; `rm -rf /var/lib/apt/lists/*`
+- [x] T009 In `Dockerfile`: install GitHub CLI from `cli.github.com` keyring (matches HolyClaude lines 82–86)
+- [x] T010 In `Dockerfile`: symlink `/usr/bin/batcat` → `/usr/local/bin/bat`; run `sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen`
+- [x] T011 In `Dockerfile`: rename base-image `node` user → `claude` at UID/GID 1000 (`usermod -l claude -d /home/claude -m node && groupmod -n claude node`); add NOPASSWD sudoers line for `claude`; `WORKDIR /workspace` and `chown` it to `claude`
+- [x] T012 In `Dockerfile`: install Claude Code CLI (FR-002) — `USER claude`, `RUN curl -fsSL https://claude.ai/install.sh | bash`, `USER root`, `ENV PATH="/home/claude/.local/bin:${PATH}"` (research R5)
+- [x] T013 [P] In `Dockerfile`: install npm globals per FR-003 — `npm i -g typescript tsx pnpm vite esbuild eslint prettier serve nodemon concurrently dotenv-cli lighthouse @google/gemini-cli @openai/codex` (FR-003 + FR-003a; explicit non-inclusion of `task-master-ai`, `cursor`, `junie`, `opencode-ai`, `wrangler`, `vercel`, `netlify-cli`, `pm2`, `prisma`, `drizzle-kit`, `eas-cli`, `@lhci/cli`, `sharp-cli`, `json-server`, `http-server`, `@marp-team/marp-cli`, `@cloudflare/next-on-pages`)
+- [x] T014 [P] In `Dockerfile`: install pip packages with `--break-system-packages` per FR-003 — `requests httpx beautifulsoup4 lxml Pillow pandas numpy openpyxl python-docx jinja2 pyyaml python-dotenv markdown rich click tqdm playwright apprise xlsxwriter` (explicit non-inclusion of `reportlab weasyprint cairosvg fpdf2 PyMuPDF pdfkit img2pdf xlrd matplotlib seaborn python-pptx fastapi uvicorn httpie`)
 
 ### s6-overlay service
 
-- [ ] T015 [P] Write `s6-overlay/s6-rc.d/xvfb/type` containing exactly `longrun` (per [data-model.md §s6-overlay](data-model.md))
-- [ ] T016 [P] Write `s6-overlay/s6-rc.d/xvfb/run` with `#!/bin/sh` shebang and the body `exec Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp` (matches HolyClaude one-line script)
-- [ ] T017 In `Dockerfile`: `COPY s6-overlay/s6-rc.d/xvfb/type /etc/s6-overlay/s6-rc.d/xvfb/type`, `COPY s6-overlay/s6-rc.d/xvfb/run /etc/s6-overlay/s6-rc.d/xvfb/run`, `chmod +x /etc/s6-overlay/s6-rc.d/xvfb/run`, `touch /etc/s6-overlay/s6-rc.d/user/contents.d/xvfb`. Do NOT add a `cloudcli` service (FR-004)
+- [x] T015 [P] Write `s6-overlay/s6-rc.d/xvfb/type` containing exactly `longrun` (per [data-model.md §s6-overlay](data-model.md))
+- [x] T016 [P] Write `s6-overlay/s6-rc.d/xvfb/run` with `#!/bin/sh` shebang and the body `exec Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp` (matches HolyClaude one-line script)
+- [x] T017 In `Dockerfile`: `COPY s6-overlay/s6-rc.d/xvfb/type /etc/s6-overlay/s6-rc.d/xvfb/type`, `COPY s6-overlay/s6-rc.d/xvfb/run /etc/s6-overlay/s6-rc.d/xvfb/run`, `chmod +x /etc/s6-overlay/s6-rc.d/xvfb/run`, `touch /etc/s6-overlay/s6-rc.d/user/contents.d/xvfb`. Do NOT add a `cloudcli` service (FR-004)
 
 ### In-image config & helper scripts
 
-- [ ] T018 [P] Write `config/settings.json` per [contracts/notifications.md §Hook wiring](contracts/notifications.md): `permissions.defaultMode = "acceptEdits"`, `env.DISABLE_AUTOUPDATER = "1"`, `model = "sonnet"`, hooks for `Stop` → `/usr/local/bin/notify.py stop` and `PostToolUseFailure` → `/usr/local/bin/notify.py error`
-- [ ] T019 [P] Write `config/CLAUDE.md` — concise in-container default memory (NOT the repo CLAUDE.md). Cover: working dir is `/workspace`, persistent dirs are `/workspace` and `~/.claude`, available tools (one-line summary), git is preconfigured, notifications opt-in via `~/.claude/notify-on`. Keep under 80 lines (FR-013 — no manuals)
-- [ ] T020 [P] Write `scripts/notify.py` — Apprise dispatcher per [contracts/notifications.md](contracts/notifications.md): exit silently if `/home/claude/.claude/notify-on` missing OR no `NOTIFY_*` env var set; collect URLs from `NOTIFY_URLS` (comma-split) and any other `NOTIFY_*` (single URL each); map event arg (`stop`/`error`) to title/body; wrap Apprise call in broad try/except, exit 0 on any exception (FR-010). Shebang `#!/usr/bin/env python3`. ≤ 60 LOC
+- [x] T018 [P] Write `config/settings.json` per [contracts/notifications.md §Hook wiring](contracts/notifications.md): `permissions.defaultMode = "acceptEdits"`, `env.DISABLE_AUTOUPDATER = "1"`, `model = "sonnet"`, hooks for `Stop` → `/usr/local/bin/notify.py stop` and `PostToolUseFailure` → `/usr/local/bin/notify.py error`
+- [x] T019 [P] Write `config/CLAUDE.md` — concise in-container default memory (NOT the repo CLAUDE.md). Cover: working dir is `/workspace`, persistent dirs are `/workspace` and `~/.claude`, available tools (one-line summary), git is preconfigured, notifications opt-in via `~/.claude/notify-on`. Keep under 80 lines (FR-013 — no manuals)
+- [x] T020 [P] Write `scripts/notify.py` — Apprise dispatcher per [contracts/notifications.md](contracts/notifications.md): exit silently if `/home/claude/.claude/notify-on` missing OR no `NOTIFY_*` env var set; collect URLs from `NOTIFY_URLS` (comma-split) and any other `NOTIFY_*` (single URL each); map event arg (`stop`/`error`) to title/body; wrap Apprise call in broad try/except, exit 0 on any exception (FR-010). Shebang `#!/usr/bin/env python3`. ≤ 60 LOC
 
 ### Entrypoint (slim, FR-014)
 
-- [ ] T021 Write `scripts/entrypoint.sh` — ~30 LOC bash script per [research.md §R4, R7, R11](research.md). Responsibilities: (a) detect first boot via sentinel `/home/claude/.claude/.kroclaude-bootstrapped`; (b) if first boot, copy `/usr/local/share/kroclaude/{settings.json,CLAUDE.md}` → `/home/claude/.claude/`, seed Codex `/home/claude/.codex/{config.toml,hooks.json}` per research R7 (`approval_policy = "on-request"`, `sandbox_mode = "workspace-write"`, `[features] codex_hooks = true`, Stop hook → `notify.py stop`), seed Gemini `/home/claude/.gemini/settings.json` (SessionEnd hook → `notify.py stop`), run `git config --global` for user.name/email/safe.directory using `${GIT_USER_NAME:-KroClaude User}` / `${GIT_USER_EMAIL:-noreply@kroclaude.local}`, create `/home/claude/.claude.json` symlink → `/home/claude/.claude/.claude.json` (research R11), touch sentinel; (c) `export DISPLAY=:99`; (d) `exec /init "$@"` to hand off to s6-overlay PID 1. **Explicitly NO**: PUID/PGID remap, `~/.claude.json` background copy loop, Cursor/Junie/OpenCode symlinks, variant-aware fork
+- [x] T021 Write `scripts/entrypoint.sh` — ~30 LOC bash script per [research.md §R4, R7, R11](research.md). Responsibilities: (a) detect first boot via sentinel `/home/claude/.claude/.kroclaude-bootstrapped`; (b) if first boot, copy `/usr/local/share/kroclaude/{settings.json,CLAUDE.md}` → `/home/claude/.claude/`, seed Codex `/home/claude/.codex/{config.toml,hooks.json}` per research R7 (`approval_policy = "on-request"`, `sandbox_mode = "workspace-write"`, `[features] codex_hooks = true`, Stop hook → `notify.py stop`), seed Gemini `/home/claude/.gemini/settings.json` (SessionEnd hook → `notify.py stop`), run `git config --global` for user.name/email/safe.directory using `${GIT_USER_NAME:-KroClaude User}` / `${GIT_USER_EMAIL:-noreply@kroclaude.local}`, create `/home/claude/.claude.json` symlink → `/home/claude/.claude/.claude.json` (research R11), touch sentinel; (c) `export DISPLAY=:99`; (d) `exec /init "$@"` to hand off to s6-overlay PID 1. **Explicitly NO**: PUID/PGID remap, `~/.claude.json` background copy loop, Cursor/Junie/OpenCode symlinks, variant-aware fork
 
 ### Dockerfile finalization
 
-- [ ] T022 In `Dockerfile`: `COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh`, `COPY scripts/notify.py /usr/local/bin/notify.py`, `COPY config/settings.json /usr/local/share/kroclaude/settings.json`, `COPY config/CLAUDE.md /usr/local/share/kroclaude/CLAUDE.md`, `chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py`. Pre-create `/home/claude/.claude` and chown to claude
-- [ ] T023 In `Dockerfile`: set `WORKDIR /workspace`, `HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD pgrep -x Xvfb >/dev/null && command -v claude >/dev/null` per [contracts/healthcheck.md](contracts/healthcheck.md), `ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]`. **No `EXPOSE` directive** (FR-004; no inbound port in v1)
+- [x] T022 In `Dockerfile`: `COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh`, `COPY scripts/notify.py /usr/local/bin/notify.py`, `COPY config/settings.json /usr/local/share/kroclaude/settings.json`, `COPY config/CLAUDE.md /usr/local/share/kroclaude/CLAUDE.md`, `chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py`. Pre-create `/home/claude/.claude` and chown to claude
+- [x] T023 In `Dockerfile`: set `WORKDIR /workspace`, `HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD pgrep -x Xvfb >/dev/null && command -v claude >/dev/null` per [contracts/healthcheck.md](contracts/healthcheck.md), `ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]`. **No `EXPOSE` directive** (FR-004; no inbound port in v1)
 
 ### Compose
 
-- [ ] T024 Write `docker-compose.yaml` per [contracts/](contracts/): single `kroclaude` service, `container_name: kroclaude`, `hostname: kroclaude`, `restart: unless-stopped`, `shm_size: 2g`, `cap_add: [SYS_ADMIN, SYS_PTRACE]` with one-line comment tying to FR-003b, `security_opt: [seccomp=unconfined]` with one-line comment tying to FR-003b, `environment` block listing only the variables in [contracts/compose-environment.md](contracts/compose-environment.md), `volumes:` mapping `kroclaude-config:/home/claude/.claude` and `kroclaude-workspace:/workspace`, top-level `volumes:` declaring `kroclaude-config:` and `kroclaude-workspace:` with no driver overrides. **No `ports:` block** (FR-004). **No `cap_add` or `security_opt` entries beyond the two pairs above** (FR-003b)
+- [x] T024 Write `docker-compose.yaml` per [contracts/](contracts/): single `kroclaude` service, `container_name: kroclaude`, `hostname: kroclaude`, `restart: unless-stopped`, `shm_size: 2g`, `cap_add: [SYS_ADMIN, SYS_PTRACE]` with one-line comment tying to FR-003b, `security_opt: [seccomp=unconfined]` with one-line comment tying to FR-003b, `environment` block listing only the variables in [contracts/compose-environment.md](contracts/compose-environment.md), `volumes:` mapping `kroclaude-config:/home/claude/.claude` and `kroclaude-workspace:/workspace`, top-level `volumes:` declaring `kroclaude-config:` and `kroclaude-workspace:` with no driver overrides. **No `ports:` block** (FR-004). **No `cap_add` or `security_opt` entries beyond the two pairs above** (FR-003b)
 
 **Checkpoint**: foundation ready — Phase 3+ user-story work can begin.
 
@@ -102,18 +102,18 @@ There is no `src/`, no `backend/`, no `frontend/`. This is a deployment artifact
 
 ### Smoke test
 
-- [ ] T025 [US1] Write `tests/smoke/test_us1.sh` shebang + setup: `set -euo pipefail`; expects working directory at repo root; uses `docker compose` v2; defines helpers for `assert_in_container` (runs `docker exec kroclaude bash -c "$1"`)
-- [ ] T026 [US1] In `tests/smoke/test_us1.sh`: bring stack up (`docker compose up -d --build`), wait up to 60 s for `docker inspect --format '{{.State.Health.Status}}' kroclaude` to equal `healthy`; fail with `docker logs kroclaude` dump on timeout (US1 acc 1)
-- [ ] T027 [US1] In `tests/smoke/test_us1.sh`: assert `docker exec kroclaude claude --version` exit 0 (US1 acc 2)
-- [ ] T028 [US1] In `tests/smoke/test_us1.sh`: assert sampled FR-003 tools resolve on PATH inside container — `gh`, `jq`, `rg`, `fd`, `tmux`, `bat`, `chromium`, `Xvfb`, `psql`, `redis-cli`, `sqlite3`, `ffmpeg`, `imagemagick` (`which $tool` exits 0 for each)
-- [ ] T029 [US1] In `tests/smoke/test_us1.sh`: assert `docker exec kroclaude id -un` returns `claude` (FR-005)
-- [ ] T030 [US1] In `tests/smoke/test_us1.sh`: assert `docker exec kroclaude bash -c 'DISPLAY=:99 chromium --headless --no-sandbox --dump-dom https://example.com'` returns HTML containing `Example Domain` (validates FR-003b end-to-end: Xvfb up + Chromium + caps right)
-- [ ] T031 [US1] In `tests/smoke/test_us1.sh`: teardown — `docker compose down` (volumes preserved); print PASS marker
+- [x] T025 [US1] Write `tests/smoke/test_us1.sh` shebang + setup: `set -euo pipefail`; expects working directory at repo root; uses `docker compose` v2; defines helpers for `assert_in_container` (runs `docker exec kroclaude bash -c "$1"`)
+- [x] T026 [US1] In `tests/smoke/test_us1.sh`: bring stack up (`docker compose up -d --build`), wait up to 60 s for `docker inspect --format '{{.State.Health.Status}}' kroclaude` to equal `healthy`; fail with `docker logs kroclaude` dump on timeout (US1 acc 1)
+- [x] T027 [US1] In `tests/smoke/test_us1.sh`: assert `docker exec kroclaude claude --version` exit 0 (US1 acc 2)
+- [x] T028 [US1] In `tests/smoke/test_us1.sh`: assert sampled FR-003 tools resolve on PATH inside container — `gh`, `jq`, `rg`, `fd`, `tmux`, `bat`, `chromium`, `Xvfb`, `psql`, `redis-cli`, `sqlite3`, `ffmpeg`, `imagemagick` (`which $tool` exits 0 for each)
+- [x] T029 [US1] In `tests/smoke/test_us1.sh`: assert `docker exec kroclaude id -un` returns `claude` (FR-005)
+- [x] T030 [US1] In `tests/smoke/test_us1.sh`: assert `docker exec kroclaude bash -c 'DISPLAY=:99 chromium --headless --no-sandbox --dump-dom https://example.com'` returns HTML containing `Example Domain` (validates FR-003b end-to-end: Xvfb up + Chromium + caps right)
+- [x] T031 [US1] In `tests/smoke/test_us1.sh`: teardown — `docker compose down` (volumes preserved); print PASS marker
 
 ### CI for US1
 
-- [ ] T032 [P] [US1] Write `.github/workflows/ci.yml` skeleton: triggers on `pull_request` and `push` to `main`; one job `build-and-smoke` running on `ubuntu-latest`; checkout, set up Docker Buildx, build image (`docker compose build --no-cache`), run `tests/smoke/test_us1.sh`, on failure upload `docker logs kroclaude` and `docker compose ps` as artifacts
-- [ ] T033 [P] [US1] In `.github/workflows/ci.yml`: add a `compose-config-validate` step running `docker compose --env-file .env.example config` and `docker compose --env-file /dev/null config` (per [contracts/compose-environment.md §Validation](contracts/compose-environment.md))
+- [x] T032 [P] [US1] Write `.github/workflows/ci.yml` skeleton: triggers on `pull_request` and `push` to `main`; one job `build-and-smoke` running on `ubuntu-latest`; checkout, set up Docker Buildx, build image (`docker compose build --no-cache`), run `tests/smoke/test_us1.sh`, on failure upload `docker logs kroclaude` and `docker compose ps` as artifacts
+- [x] T033 [P] [US1] In `.github/workflows/ci.yml`: add a `compose-config-validate` step running `docker compose --env-file .env.example config` and `docker compose --env-file /dev/null config` (per [contracts/compose-environment.md §Validation](contracts/compose-environment.md))
 
 **Checkpoint**: User Story 1 is fully functional and testable independently — this is the MVP. Stop here to demo if the team wants.
 
@@ -129,14 +129,14 @@ There is no `src/`, no `backend/`, no `frontend/`. This is a deployment artifact
 
 Most US2 implementation lives in T021's first-boot stanza of `entrypoint.sh`. The tasks below add the test surface and the rebuild scenarios.
 
-- [ ] T034 [US2] Verify `scripts/entrypoint.sh` (from T021) implements the sentinel-guarded seeding correctly: re-read T021 against [contracts/volumes.md §Lifecycle invariants](contracts/volumes.md). Confirm idempotence (second boot is a no-op over user-modified files)
-- [ ] T035 [US2] Write `tests/smoke/test_us2.sh` shebang + helpers (similar to T025)
-- [ ] T036 [US2] In `tests/smoke/test_us2.sh`: empty-volume first-boot scenario — `docker compose down -v && docker compose up -d`; assert healthy within 60 s; assert `/home/claude/.claude/.kroclaude-bootstrapped` and `/home/claude/.claude/settings.json` exist; measure first-boot time and assert under 15 s (SC-003)
-- [ ] T037 [US2] In `tests/smoke/test_us2.sh`: workspace persistence scenario — `docker exec kroclaude bash -c 'echo persist-token > /workspace/.us2-token'`; `docker compose down`; `docker compose up -d`; wait healthy; assert `cat /workspace/.us2-token` returns `persist-token` (US2 acc 1)
-- [ ] T038 [US2] In `tests/smoke/test_us2.sh`: config persistence scenario — write `/home/claude/.claude/.us2-config-token`; recreate container; assert file persists
-- [ ] T039 [US2] In `tests/smoke/test_us2.sh`: rebuild scenario — `docker compose down`, `docker compose build --no-cache`, `docker compose up -d`; assert previously persisted files still exist (US2 acc 1, rebuild path)
-- [ ] T040 [US2] In `tests/smoke/test_us2.sh`: workspace-only wipe scenario — `docker compose down`, `docker volume rm kroclaude-workspace`, `docker compose up -d`; assert workspace is empty AND config volume is intact (US2 acc 2)
-- [ ] T041 [P] [US2] In `.github/workflows/ci.yml`: add `tests/smoke/test_us2.sh` to the `build-and-smoke` job after T032's US1 step
+- [x] T034 [US2] Verify `scripts/entrypoint.sh` (from T021) implements the sentinel-guarded seeding correctly: re-read T021 against [contracts/volumes.md §Lifecycle invariants](contracts/volumes.md). Confirm idempotence (second boot is a no-op over user-modified files)
+- [x] T035 [US2] Write `tests/smoke/test_us2.sh` shebang + helpers (similar to T025)
+- [x] T036 [US2] In `tests/smoke/test_us2.sh`: empty-volume first-boot scenario — `docker compose down -v && docker compose up -d`; assert healthy within 60 s; assert `/home/claude/.claude/.kroclaude-bootstrapped` and `/home/claude/.claude/settings.json` exist; measure first-boot time and assert under 15 s (SC-003)
+- [x] T037 [US2] In `tests/smoke/test_us2.sh`: workspace persistence scenario — `docker exec kroclaude bash -c 'echo persist-token > /workspace/.us2-token'`; `docker compose down`; `docker compose up -d`; wait healthy; assert `cat /workspace/.us2-token` returns `persist-token` (US2 acc 1)
+- [x] T038 [US2] In `tests/smoke/test_us2.sh`: config persistence scenario — write `/home/claude/.claude/.us2-config-token`; recreate container; assert file persists
+- [x] T039 [US2] In `tests/smoke/test_us2.sh`: rebuild scenario — `docker compose down`, `docker compose build --no-cache`, `docker compose up -d`; assert previously persisted files still exist (US2 acc 1, rebuild path)
+- [x] T040 [US2] In `tests/smoke/test_us2.sh`: workspace-only wipe scenario — `docker compose down`, `docker volume rm kroclaude-workspace`, `docker compose up -d`; assert workspace is empty AND config volume is intact (US2 acc 2)
+- [x] T041 [P] [US2] In `.github/workflows/ci.yml`: add `tests/smoke/test_us2.sh` to the `build-and-smoke` job after T032's US1 step
 
 **Checkpoint**: US1 and US2 both work independently.
 
@@ -150,20 +150,20 @@ Most US2 implementation lives in T021's first-boot stanza of `entrypoint.sh`. Th
 
 ### Implementation tasks
 
-- [ ] T042 [US3] Verify `scripts/notify.py` (from T020) matches [contracts/notifications.md §Failure handling](contracts/notifications.md): no exception escapes `main()`; exit 0 on apprise import failure
-- [ ] T043 [US3] Verify `config/settings.json` (from T018) hooks block matches [contracts/notifications.md §Hook wiring](contracts/notifications.md) verbatim
-- [ ] T044 [US3] Verify `scripts/entrypoint.sh` (from T021) seeds Codex `~/.codex/hooks.json` with `Stop → notify.py stop` and Gemini `~/.gemini/settings.json` with `SessionEnd → notify.py stop` per [research.md R7](research.md)
+- [x] T042 [US3] Verify `scripts/notify.py` (from T020) matches [contracts/notifications.md §Failure handling](contracts/notifications.md): no exception escapes `main()`; exit 0 on apprise import failure
+- [x] T043 [US3] Verify `config/settings.json` (from T018) hooks block matches [contracts/notifications.md §Hook wiring](contracts/notifications.md) verbatim
+- [x] T044 [US3] Verify `scripts/entrypoint.sh` (from T021) seeds Codex `~/.codex/hooks.json` with `Stop → notify.py stop` and Gemini `~/.gemini/settings.json` with `SessionEnd → notify.py stop` per [research.md R7](research.md)
 
 ### Smoke test
 
-- [ ] T045 [US3] Write `tests/smoke/test_us3.sh` shebang + helpers
-- [ ] T046 [US3] In `tests/smoke/test_us3.sh`: assert `/usr/local/bin/notify.py` exists, is executable, and `python3 -c 'import apprise'` succeeds inside the container
-- [ ] T047 [US3] In `tests/smoke/test_us3.sh`: gate-1 silent — without sentinel `notify-on` and without any `NOTIFY_*`, run `notify.py stop`; assert exit 0 and empty stdout/stderr
-- [ ] T048 [US3] In `tests/smoke/test_us3.sh`: gate-2 silent — touch `notify-on`, set `NOTIFY_URLS=` (empty), run `notify.py stop`; assert exit 0 and empty stdout/stderr (no destination)
-- [ ] T049 [US3] In `tests/smoke/test_us3.sh`: silent-fail — touch `notify-on`, set `NOTIFY_URLS=tgram://invalid_token`, run `notify.py stop`; assert exit 0 and no traceback in stderr (FR-010)
-- [ ] T050 [US3] In `tests/smoke/test_us3.sh`: assert seeded Codex `~/.codex/hooks.json` and Gemini `~/.gemini/settings.json` reference `/usr/local/bin/notify.py stop`
-- [ ] T051 [US3] In `tests/smoke/test_us3.sh`: cleanup — remove `notify-on` sentinel; teardown
-- [ ] T052 [P] [US3] In `.github/workflows/ci.yml`: add `tests/smoke/test_us3.sh` to the `build-and-smoke` job after T041's US2 step
+- [x] T045 [US3] Write `tests/smoke/test_us3.sh` shebang + helpers
+- [x] T046 [US3] In `tests/smoke/test_us3.sh`: assert `/usr/local/bin/notify.py` exists, is executable, and `python3 -c 'import apprise'` succeeds inside the container
+- [x] T047 [US3] In `tests/smoke/test_us3.sh`: gate-1 silent — without sentinel `notify-on` and without any `NOTIFY_*`, run `notify.py stop`; assert exit 0 and empty stdout/stderr
+- [x] T048 [US3] In `tests/smoke/test_us3.sh`: gate-2 silent — touch `notify-on`, set `NOTIFY_URLS=` (empty), run `notify.py stop`; assert exit 0 and empty stdout/stderr (no destination)
+- [x] T049 [US3] In `tests/smoke/test_us3.sh`: silent-fail — touch `notify-on`, set `NOTIFY_URLS=tgram://invalid_token`, run `notify.py stop`; assert exit 0 and no traceback in stderr (FR-010)
+- [x] T050 [US3] In `tests/smoke/test_us3.sh`: assert seeded Codex `~/.codex/hooks.json` and Gemini `~/.gemini/settings.json` reference `/usr/local/bin/notify.py stop`
+- [x] T051 [US3] In `tests/smoke/test_us3.sh`: cleanup — remove `notify-on` sentinel; teardown
+- [x] T052 [P] [US3] In `.github/workflows/ci.yml`: add `tests/smoke/test_us3.sh` to the `build-and-smoke` job after T041's US2 step
 
 **Checkpoint**: all three user stories independently functional.
 
@@ -173,14 +173,14 @@ Most US2 implementation lives in T021's first-boot stanza of `entrypoint.sh`. Th
 
 **Purpose**: enforce constitutional non-negotiables (security scan, image-size budget, secrets check, multi-arch, attribution).
 
-- [ ] T053 [P] In `.github/workflows/ci.yml`: add `trivy-scan` job — `aquasecurity/trivy-action@master` with `severity: HIGH,CRITICAL` and `exit-code: 1`. Reads optional `.trivyignore` (do NOT create it preemptively per [research.md §Open items](research.md))
-- [ ] T054 [P] In `.github/workflows/ci.yml`: add `image-size-budget` job — measure compressed image size, compare against a stored baseline (start with no baseline; baseline established on first merge to main; PRs >10% over baseline fail per Constitution Principle III)
-- [ ] T055 [P] In `.github/workflows/ci.yml`: add `secrets-in-history` job — `docker history --no-trunc kroclaude:ci | grep -E 'ANTHROPIC_API_KEY=|NOTIFY_[A-Z_]+=' && exit 1 || exit 0` (SC-005)
-- [ ] T056 [P] In `.github/workflows/ci.yml`: add `multi-arch-release` job — runs only on `push` of a `v*.*.*` tag; uses `docker buildx build --push --platform linux/amd64,linux/arm64` to the registry (registry/owner TBD before the first release tag — leave as `${{ vars.REGISTRY }}/${{ vars.IMAGE_NAME }}` placeholder per research R8)
-- [ ] T057 [P] Write `CHANGELOG.md` at repo root with initial v1.0.0 entry summarizing what's in scope vs HolyClaude (CloudCLI excluded, profile system removed, named volumes only, slim entrypoint, three AI CLIs)
-- [ ] T058 [P] Write `THIRD-PARTY-NOTICES` at repo root attributing HolyClaude (`https://github.com/CoderLuii/HolyClaude`) and preserving its license per the constitution's Build/Release/Workflow section. Note Apprise (Python), s6-overlay (BSD-style), Chromium (BSD), and the AI CLI npm packages
-- [ ] T059 FR coverage audit: walk every FR in [spec.md](spec.md) (FR-001 through FR-014, plus FR-003a, FR-003b) and confirm each is exercised by at least one task above — produce a short table in PR description; flag any uncovered FR before declaring v1 done
-- [ ] T060 SC coverage audit: walk every SC in [spec.md](spec.md) (SC-001 through SC-005) and confirm each is enforceable by a CI step or manual procedure documented in [quickstart.md](quickstart.md); flag any uncovered SC
+- [x] T053 [P] In `.github/workflows/ci.yml`: add `trivy-scan` job — `aquasecurity/trivy-action@master` with `severity: HIGH,CRITICAL` and `exit-code: 1`. Reads optional `.trivyignore` (do NOT create it preemptively per [research.md §Open items](research.md))
+- [x] T054 [P] In `.github/workflows/ci.yml`: add `image-size-budget` job — measure compressed image size, compare against a stored baseline (start with no baseline; baseline established on first merge to main; PRs >10% over baseline fail per Constitution Principle III)
+- [x] T055 [P] In `.github/workflows/ci.yml`: add `secrets-in-history` job — `docker history --no-trunc kroclaude:ci | grep -E 'ANTHROPIC_API_KEY=|NOTIFY_[A-Z_]+=' && exit 1 || exit 0` (SC-005)
+- [x] T056 [P] In `.github/workflows/ci.yml`: add `multi-arch-release` job — runs only on `push` of a `v*.*.*` tag; uses `docker buildx build --push --platform linux/amd64,linux/arm64` to the registry (registry/owner TBD before the first release tag — leave as `${{ vars.REGISTRY }}/${{ vars.IMAGE_NAME }}` placeholder per research R8)
+- [x] T057 [P] Write `CHANGELOG.md` at repo root with initial v1.0.0 entry summarizing what's in scope vs HolyClaude (CloudCLI excluded, profile system removed, named volumes only, slim entrypoint, three AI CLIs)
+- [x] T058 [P] Write `THIRD-PARTY-NOTICES` at repo root attributing HolyClaude (`https://github.com/CoderLuii/HolyClaude`) and preserving its license per the constitution's Build/Release/Workflow section. Note Apprise (Python), s6-overlay (BSD-style), Chromium (BSD), and the AI CLI npm packages
+- [x] T059 FR coverage audit: walk every FR in [spec.md](spec.md) (FR-001 through FR-014, plus FR-003a, FR-003b) and confirm each is exercised by at least one task above — produce a short table in PR description; flag any uncovered FR before declaring v1 done
+- [x] T060 SC coverage audit: walk every SC in [spec.md](spec.md) (SC-001 through SC-005) and confirm each is enforceable by a CI step or manual procedure documented in [quickstart.md](quickstart.md); flag any uncovered SC
 
 ---
 

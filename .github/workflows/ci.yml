@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-smoke:
+    name: Build + smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate compose with default env
+        run: docker compose --env-file /dev/null config
+
+      - name: Validate compose with .env.example
+        run: docker compose --env-file .env.example config
+
+      - name: Smoke — US1 (spin up Claude shell)
+        run: bash tests/smoke/test_us1.sh
+
+      - name: Smoke — US2 (persistence across recreate / rebuild)
+        run: bash tests/smoke/test_us2.sh
+
+      - name: Smoke — US3 (notifications opt-in / silent-fail)
+        run: bash tests/smoke/test_us3.sh
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker compose logs --no-color > docker-compose.log || true
+          docker ps -a > docker-ps.log || true
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs-${{ github.run_id }}
+          path: |
+            docker-compose.log
+            docker-ps.log
+
+  trivy-scan:
+    name: Trivy vulnerability scan
+    runs-on: ubuntu-latest
+    needs: build-and-smoke
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image for scanning
+        run: docker build -t kroclaude:ci .
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: kroclaude:ci
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+  image-size-budget:
+    name: Image size budget (≤10% drift)
+    runs-on: ubuntu-latest
+    needs: build-and-smoke
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t kroclaude:ci .
+      - name: Measure compressed size
+        id: size
+        run: |
+          size_bytes=$(docker image inspect kroclaude:ci --format '{{.Size}}')
+          echo "size_bytes=$size_bytes" >> "$GITHUB_OUTPUT"
+          echo "Image size: $size_bytes bytes ($(numfmt --to=iec $size_bytes))"
+      # Baseline tracking is a v0.1.0+ concern. Once we have a published
+      # baseline, this step compares and fails on >10% drift. Until then,
+      # the job just records the size.
+
+  secrets-in-history:
+    name: No credentials in image layers (SC-005)
+    runs-on: ubuntu-latest
+    needs: build-and-smoke
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t kroclaude:ci .
+      - name: Grep docker history for credential-shaped values
+        run: |
+          history=$(docker history --no-trunc --format '{{.CreatedBy}}' kroclaude:ci)
+          if echo "$history" | grep -E 'ANTHROPIC_API_KEY=|NOTIFY_[A-Z_]+='; then
+            echo "::error::Credential-shaped value found in image history"
+            exit 1
+          fi
+          echo "no credential-shaped values in image history"
+
+  multi-arch-release:
+    name: Multi-arch publish (release)
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [build-and-smoke, trivy-scan, secrets-in-history]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY || 'ghcr.io' }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push (amd64 + arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ vars.REGISTRY || 'ghcr.io' }}/${{ github.repository_owner }}/kroclaude:${{ github.ref_name }}
+            ${{ vars.REGISTRY || 'ghcr.io' }}/${{ github.repository_owner }}/kroclaude:latest
