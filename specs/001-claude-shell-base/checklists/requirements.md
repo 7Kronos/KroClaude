@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,13 +31,9 @@
 
 ## Notes
 
-- One [NEEDS CLARIFICATION] marker is intentionally retained on **FR-003**
-  (tool inventory). The user explicitly directed that tool selection happen
-  during the `/speckit-clarify` phase, so this marker is left in place to be
-  resolved there rather than during `/speckit-specify`.
-- All other clarifications were resolvable from the user's directive
-  (CloudCLI excluded, manuals/docs excluded, HolyClaude as reference,
-  shell-scripts to be challenged) or by reasonable defaults documented in
-  the Assumptions section.
-- Items marked incomplete require spec updates before `/speckit-clarify` or
-  `/speckit-plan`.
+- All checklist items pass after the 2026-04-27 clarification session
+  (5 questions answered: AI CLI scope, browser automation, workspace
+  storage mode, profile model, curated tool set).
+- The original deferred clarification on FR-003 (tool inventory) is now
+  resolved with a concrete enumerated list.
+- Spec is ready for `/speckit-plan`.

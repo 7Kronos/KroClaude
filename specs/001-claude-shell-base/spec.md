@@ -69,33 +69,7 @@ verify both the authentication and the file are still present.
 
 ---
 
-### User Story 3 — Files Created Inside the Container Have Correct Host Ownership (Priority: P2)
-
-A user runs the stack on Linux where the container's internal user must match
-the host user that owns the bind-mounted directories. They configure the host
-UID/GID via environment variables, and any file the container creates in the
-workspace ends up owned by that host user — no `sudo chown` dance after
-the fact.
-
-**Why this priority**: ownership mismatch is the most common friction for
-Linux users of bind-mounted Docker dev environments. Solving it once at boot
-avoids recurring permission grief.
-
-**Independent Test**: set `PUID`/`PGID` to a non-default value, start the
-stack with a bind-mounted workspace, create a file from inside the container,
-and verify on the host that the file is owned by the configured UID:GID.
-
-**Acceptance Scenarios**:
-
-1. **Given** the host user is UID 1001, **When** the container starts with
-   `PUID=1001`, **Then** files created in the bind-mounted workspace are
-   owned by 1001 on the host.
-2. **Given** no `PUID`/`PGID` is provided, **When** the container starts,
-   **Then** it falls back to a sensible default and still functions.
-
----
-
-### User Story 4 — Get Notified When Claude Finishes or Fails (Priority: P2)
+### User Story 3 — Get Notified When Claude Finishes or Fails (Priority: P2)
 
 A user kicks off a long-running Claude task and walks away. When Claude
 finishes the task or hits a tool failure, the user receives a notification
@@ -124,29 +98,6 @@ destination.
 
 ---
 
-### User Story 5 — Choose a Tool Profile at Build Time (Priority: P3)
-
-A user who only needs the bare minimum (small image, short pull time) builds
-the image with a "minimal" tool profile; a user who wants the full curated
-set builds with the "full" profile. The default profile is the one most
-representative of typical Claude Code workflows.
-
-**Why this priority**: useful for resource-constrained Coolify nodes and CI
-runners, but a single well-chosen default already covers most users.
-
-**Independent Test**: build the image with the minimal profile, verify the
-expected tool subset is present and the unwanted ones are absent, then build
-with the full profile and verify the superset is present.
-
-**Acceptance Scenarios**:
-
-1. **Given** a build with the minimal profile, **When** the user inspects the
-   image, **Then** only the documented minimal tool list is installed.
-2. **Given** a build with the full profile, **When** the user inspects the
-   image, **Then** the full curated tool list is installed.
-
----
-
 ### Edge Cases
 
 - **First boot vs. subsequent boots**: the very first start with empty
@@ -155,8 +106,6 @@ with the full profile and verify the superset is present.
   pre-existing user state without prompting destructive migrations.
 - **Missing API key**: the container must still start (so the user can fix
   it from inside), but `claude` use must surface a clear error.
-- **Bind-mount created by Docker as root**: the entrypoint must repair
-  ownership at startup so the in-container user can write to it.
 - **Concurrent containers sharing a volume**: out of scope for v1; document
   as unsupported.
 - **Build behind a corporate proxy / restricted network**: out of scope for
@@ -165,56 +114,123 @@ with the full profile and verify the superset is present.
   the container must remain usable as a shell — the user can always exec in
   and continue.
 
+## Clarifications
+
+### Session 2026-04-27
+
+- Q: Which AI CLIs ship in the image alongside Claude Code? → A: Claude
+  Code CLI + the Codex CLI + the Gemini CLI (the three first-party
+  "big lab" assistant CLIs). Cursor, Junie, and OpenCode are excluded.
+- Q: Should the image support headless browser automation (Playwright /
+  Puppeteer / Chromium)? → A: Yes — full headless-Chromium support with
+  an Xvfb display server is in scope, and the additional Linux
+  capabilities (`SYS_ADMIN`, `SYS_PTRACE`) plus `seccomp=unconfined`
+  required by Chromium are accepted as a documented tradeoff.
+- Q: How is the user's `/workspace` data stored — bind-mount, named
+  volume, or both? → A: Named Docker volume only. Host bind-mounts are
+  out of scope; `PUID`/`PGID` runtime-remap is not implemented; the
+  HolyClaude `entrypoint.sh` UID/GID logic is dropped. Users who want
+  to view workspace files from a host editor attach to the running
+  container (e.g., VS Code Dev Containers over the Docker socket).
+- Q: Should the image have a profile system (minimal vs full), or a single
+  curated set? → A: Single curated set. There is exactly one curated tool
+  list and one image; the minimal/full profile system, the `VARIANT` build
+  arg, and the variant-aware bootstrap fork are all out of scope.
+- Q: Approve the curated tool set? → A: Adopt the recommended baseline plus
+  three additions: `ffmpeg` (apt), `lighthouse` (npm global), and
+  `xlsxwriter` (pip). All other "full"-only extras from HolyClaude
+  (Azure CLI, pandoc, libvips, wrangler/vercel/netlify-cli, pm2, prisma,
+  drizzle-kit, eas-cli, sharp-cli, json-server, http-server, marp,
+  cf-next-on-pages, reportlab/weasyprint/cairosvg/fpdf2/PyMuPDF/pdfkit/
+  img2pdf, xlrd, matplotlib, seaborn, python-pptx, fastapi, uvicorn,
+  httpie, task-master-ai) are excluded.
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: The system MUST be deployable as a docker-compose stack on
-  Coolify with no host-side patches and no privileged-mode requirements.
+  Coolify with no host-side patches and no `privileged: true` requirement.
+  Granular Linux capabilities (`cap_add`) and seccomp profile relaxation
+  declared in the compose file are permitted where justified by an FR
+  (see FR-003b for the browser-automation case) and MUST be enumerated
+  explicitly — never as a blanket privileged-mode shortcut.
 - **FR-002**: The image MUST include the Claude Code CLI at a pinned version
   and make it available on the in-container user's `PATH`.
-- **FR-003**: The image MUST include a curated set of common developer tools
-  at pinned or otherwise reproducibly resolvable versions.
-  [NEEDS CLARIFICATION: exact tool inventory — to be selected during the
-  clarification phase per the user's explicit instruction. Inputs include the
-  HolyClaude reference set (excluding CloudCLI / web UI / its plugins, and
-  excluding manuals/documentation tooling) and the categories the user wants
-  to keep, drop, or add.]
+- **FR-003**: The image MUST include exactly the following curated tool
+  set, at pinned or otherwise reproducibly resolvable versions, and no
+  other developer tools without an amendment to this spec:
+  - **Shell core (apt)**: `git`, `curl`, `wget`, `jq`, `ripgrep`,
+    `fd-find`, `unzip`, `zip`, `tree`, `tmux`, `fzf`, `bat`, `sudo`.
+  - **Build & language toolchain**: Node.js 22 (from base image),
+    `build-essential`, `pkg-config`, `python3`, `python3-pip`,
+    `python3-venv`.
+  - **Browser automation stack (per FR-003b)**: `chromium`, `xvfb`,
+    `fonts-liberation2`, `fonts-dejavu-core`, `fonts-noto-core`,
+    `fonts-noto-color-emoji`.
+  - **Locale**: `locales` configured for `en_US.UTF-8`.
+  - **Debugging**: `strace`, `lsof`, `iproute2`, `procps`, `htop`.
+  - **Database clients**: `postgresql-client`, `redis-tools`, `sqlite3`.
+  - **Network/SSH**: `openssh-client` (client only — no SSH server).
+  - **Media**: `imagemagick`, `ffmpeg`.
+  - **Sandbox helper**: `bubblewrap` (setuid; required by Codex CLI).
+  - **GitHub**: `gh` (GitHub CLI).
+  - **AI CLIs (per FR-003a)**: `@google/gemini-cli`, `@openai/codex`.
+  - **npm globals**: `typescript`, `tsx`, `pnpm`, `vite`, `esbuild`,
+    `eslint`, `prettier`, `serve`, `nodemon`, `concurrently`,
+    `dotenv-cli`, `lighthouse`.
+  - **Python packages (pip)**: `requests`, `httpx`, `beautifulsoup4`,
+    `lxml`, `Pillow`, `pandas`, `numpy`, `openpyxl`, `python-docx`,
+    `jinja2`, `pyyaml`, `python-dotenv`, `markdown`, `rich`, `click`,
+    `tqdm`, `playwright`, `apprise`, `xlsxwriter`.
+- **FR-003a**: The image MUST include exactly three AI assistant CLIs:
+  Claude Code (per FR-002), the Codex CLI (`@openai/codex`), and the
+  Gemini CLI (`@google/gemini-cli`). Cursor CLI, Junie CLI, and OpenCode
+  CLI MUST NOT be installed. Any HolyClaude entrypoint or bootstrap glue
+  that exists solely for an excluded CLI (e.g., per-CLI config-directory
+  symlinks) MUST be dropped accordingly.
+- **FR-003b**: The image MUST support running a headless Chromium-based
+  browser for Playwright/Puppeteer workflows. To make this work, the
+  image MUST install Chromium and the fonts it needs, and the runtime
+  MUST provide an Xvfb virtual display. The compose file MUST declare
+  exactly these capability and security relaxations and no others:
+  `cap_add: SYS_ADMIN, SYS_PTRACE` and `security_opt: seccomp=unconfined`.
+  Each addition MUST be commented in the compose file with a one-line
+  rationale tying it back to this FR. Persistent processes required for
+  this capability (only Xvfb, after CloudCLI exclusion) MAY justify a
+  process supervisor; that decision is made at planning time per FR-014.
 - **FR-004**: The image MUST NOT include the HolyClaude web UI ("CloudCLI",
   i.e. `@siteboon/claude-code-ui`), its plugins, the WebSocket / Shell /
   model patches that target it, or any port or healthcheck wired
   specifically to it.
 - **FR-005**: The container MUST run application processes as a non-root
   user by default; root-only operations MUST happen at build time, not at
-  runtime.
-- **FR-006**: The system MUST allow the in-container user's UID and GID to
-  be aligned with the host user's UID/GID via configuration, so bind-mounted
-  files have correct host ownership.
-- **FR-007**: The system MUST persist Claude Code configuration and
-  credentials across container recreation and image rebuilds.
-- **FR-008**: The system MUST persist user project / workspace data across
-  container recreation and image rebuilds, in a volume separate from the
-  Claude configuration volume.
-- **FR-009**: On first boot with empty volumes, the system MUST seed default
-  configuration without manual intervention; on subsequent boots it MUST NOT
-  overwrite user-modified configuration.
-- **FR-010**: The image MUST be buildable in two reproducible modes (a
-  smaller "minimal" profile and a larger "full" profile), with the default
-  profile clearly documented.
-- **FR-011**: The system MUST emit a notification when Claude Code finishes
+  runtime. The in-container user's UID/GID is fixed at image build time;
+  no runtime UID/GID remapping (`PUID`/`PGID`) is supported.
+- **FR-006**: The system MUST persist Claude Code configuration and
+  credentials in a named Docker volume that survives container recreation
+  and image rebuilds.
+- **FR-007**: The system MUST persist user project / workspace data in a
+  named Docker volume separate from the Claude configuration volume; both
+  volumes are independently wipeable, backupable by Coolify, and survive
+  container recreation. Host bind-mounts to `/workspace` are out of scope.
+- **FR-008**: On first boot with empty volumes, the system MUST seed
+  default configuration without manual intervention; on subsequent boots
+  it MUST NOT overwrite user-modified configuration.
+- **FR-009**: The system MUST emit a notification when Claude Code finishes
   a task or surfaces a tool failure, but ONLY when the user has explicitly
   opted in and provided at least one notification destination.
-- **FR-012**: Notification failures (unreachable destination, malformed URL)
+- **FR-010**: Notification failures (unreachable destination, malformed URL)
   MUST NOT crash or disrupt the running session.
-- **FR-013**: The container MUST expose a meaningful health signal that
+- **FR-011**: The container MUST expose a meaningful health signal that
   Coolify and `docker compose` can use to determine readiness.
-- **FR-014**: All credentials (API keys, notification URLs, git identity)
+- **FR-012**: All credentials (API keys, notification URLs, git identity)
   MUST be injectable at runtime via environment variables; they MUST NOT be
   baked into the image, present in build args, or committed to the repo.
-- **FR-015**: The system MUST NOT require any manual or documentation
+- **FR-013**: The system MUST NOT require any manual or documentation
   artifacts to be functional; producing user-facing manuals/docs is
   explicitly out of scope for this feature.
-- **FR-016**: Any shell-script glue code carried over from the HolyClaude
+- **FR-014**: Any shell-script glue code carried over from the HolyClaude
   reference (entrypoint, bootstrap, supervisor run scripts) MUST be
   re-evaluated rather than copied verbatim. Each such script that survives
   into KroClaude MUST be justified during planning by either (a) a
@@ -227,12 +243,12 @@ with the full profile and verify the superset is present.
 
 - **Container Image**: the buildable artifact carrying the Claude Code CLI
   and the curated tool set; tagged by semantic version.
-- **Configuration Volume**: persistent storage for Claude Code credentials,
-  per-tool configuration, and shell history; survives container recreation.
-- **Workspace Volume**: persistent storage for the user's project files;
-  survives container recreation and is independently wipeable.
-- **Tool Profile**: a named subset of the curated toolchain selected at
-  build time (e.g., "minimal", "full"); determines image size and contents.
+- **Configuration Volume**: a named Docker volume holding Claude Code
+  credentials, per-tool configuration, and shell history; survives
+  container recreation and image rebuilds.
+- **Workspace Volume**: a named Docker volume holding the user's project
+  files; survives container recreation, is independently wipeable, and is
+  not host-bind-mountable in v1.
 - **Notification Channel**: a user-supplied destination URL the system uses
   to deliver task-complete and error events when opted in.
 
@@ -246,18 +262,13 @@ with the full profile and verify the superset is present.
 - **SC-002**: After a full container teardown and image rebuild, 100% of
   authenticated users no longer need to re-authenticate Claude Code on the
   next start.
-- **SC-003**: On a Linux host with matching `PUID`/`PGID`, 100% of files
-  created inside the container appear on the host owned by the configured
-  user without manual `chown`.
-- **SC-004**: The image's first-boot bootstrap completes in under 15
+- **SC-003**: The image's first-boot bootstrap completes in under 15
   seconds on a typical machine and produces no permission errors visible to
   the user.
-- **SC-005**: The "minimal" profile produces an image at least 30% smaller
-  (compressed) than the "full" profile.
-- **SC-006**: The compose file passes `docker compose config` validation and
+- **SC-004**: The compose file passes `docker compose config` validation and
   deploys cleanly on Coolify's docker-compose application type with zero
   host-side intervention.
-- **SC-007**: Zero credentials (API keys, notification URLs) appear in
+- **SC-005**: Zero credentials (API keys, notification URLs) appear in
   `docker history`, the committed repository, or any image layer.
 
 ## Assumptions
@@ -277,6 +288,8 @@ with the full profile and verify the superset is present.
   explicitly out of scope for this feature; only a minimal `.env.example`
   and the compose file itself are required for someone familiar with the
   domain to deploy the stack.
-- The project will offer at most two build profiles in v1 (minimal vs full).
+- The project ships exactly one curated tool set in v1 (no minimal/full
+  variants). Future variants, if needed, can be introduced via Dockerfile
+  build args without breaking v1 deployments.
 - Notifications integrate with whatever destination URLs the user already
   uses; the project does not host a notification relay.
