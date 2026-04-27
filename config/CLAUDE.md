@@ -1,48 +1,72 @@
-# KroClaude — In-Container Memory
+# Container Environment
 
-This file is seeded into `~/.claude/CLAUDE.md` on first boot. Edit it from
-inside the container (it lives in the persistent config volume).
+You are running inside the KroClaude container (Debian Bookworm, Node 24,
+Python 3). This file is your persistent memory for this environment. Treat
+its contents as facts and operating rules.
 
-## Environment
+## Persistence
 
-- Working directory: `/workspace` — your project files live here.
-- Persistent paths: `/workspace` (project files) and `~/.claude` (Claude
-  credentials, per-tool config, shell history). Anything outside these is
-  ephemeral and lost on container recreation.
-- In-container user: `claude` (UID 1000). `sudo` works without a password
-  for ad-hoc package installs.
+- `/workspace` — user project files. Persistent (named Docker volume).
+  Your default working directory.
+- `~/.claude` — your own config, credentials, shell history, and hook
+  configs. Persistent (separate named Docker volume).
+- Everything else — ephemeral. Anything written outside the two paths
+  above is lost on container recreation. When you need to save state,
+  put it in one of the persistent paths.
 
-## Available tooling
+## Tools available (already installed; do not propose installing them)
 
-- AI CLIs: `claude`, `gemini`, `codex`.
-- Shell core: `git`, `curl`, `wget`, `jq`, `rg` (ripgrep), `fd`, `tmux`,
-  `fzf`, `bat`.
-- Build & language: Node 22, Python 3, `build-essential`, `pkg-config`.
+- AI CLIs: `claude` (you), `gemini`, `codex`.
+- Shell core: `git`, `gh`, `curl`, `wget`, `jq`, `rg`, `fd`, `tree`,
+  `tmux`, `fzf`, `bat`, `htop`, `strace`, `lsof`, `ss`.
+- Build & languages: Node 24, Python 3, `build-essential`, `pkg-config`.
 - npm globals: `typescript`, `tsx`, `pnpm`, `vite`, `esbuild`, `eslint`,
-  `prettier`, `serve`, `nodemon`, `concurrently`, `dotenv-cli`, `lighthouse`.
-- Python packages: `requests`, `httpx`, `beautifulsoup4`, `Pillow`,
-  `pandas`, `numpy`, `openpyxl`, `python-docx`, `playwright`, `apprise`,
-  `xlsxwriter`, others.
+  `prettier`, `serve`, `nodemon`, `concurrently`, `dotenv-cli`,
+  `lighthouse`.
+- Python packages: `requests`, `httpx`, `beautifulsoup4`, `lxml`,
+  `Pillow`, `pandas`, `numpy`, `openpyxl`, `python-docx`, `jinja2`,
+  `pyyaml`, `python-dotenv`, `markdown`, `rich`, `click`, `tqdm`,
+  `playwright`, `apprise`, `xlsxwriter`.
 - Database CLIs: `psql`, `redis-cli`, `sqlite3`.
-- Browser automation: headless Chromium via Xvfb (`DISPLAY=:99`); use
-  `playwright` (Python) or Puppeteer (Node).
-- GitHub: `gh`.
 - Media: `imagemagick`, `ffmpeg`.
-- Debugging: `strace`, `lsof`, `ss`, `htop`.
+
+If a needed tool is missing, you can `sudo apt-get install <pkg>` or
+install a language-specific package; `sudo` is passwordless for the
+`claude` user.
+
+## Browser automation
+
+Chromium and Xvfb are preinstalled. `DISPLAY=:99` is already exported.
+`CHROME_PATH` and `PUPPETEER_EXECUTABLE_PATH` are set to
+`/usr/bin/chromium`. Use `playwright` (Python) or Puppeteer (Node) for
+headless browsing — no extra setup needed.
 
 ## Git
 
-`git` is preconfigured at first boot with `user.name`, `user.email`, and
-`safe.directory /workspace` from the `GIT_USER_NAME` / `GIT_USER_EMAIL`
-environment variables.
+`user.name`, `user.email`, and `safe.directory /workspace` are
+preconfigured at first boot from the `GIT_USER_NAME` / `GIT_USER_EMAIL`
+environment variables. Do not reconfigure unless explicitly asked.
 
-## Notifications (opt-in)
+## Notifications
 
-To enable Apprise-based notifications when Claude finishes a task:
+`Stop`, `SessionEnd`, and `PostToolUseFailure` hooks are wired to
+`/usr/local/bin/notify.py`. Notifications fire only when both
+`~/.claude/notify-on` exists AND at least one `NOTIFY_*` env var is set.
+You don't need to act on this — it's ambient.
 
-1. `touch ~/.claude/notify-on`
-2. Set at least one `NOTIFY_*` env var in the host `.env` (e.g.,
-   `NOTIFY_URLS=tgram://token/chat_id`).
+## Out of scope — do not propose
 
-Notifications stay silent if either gate is missing, and silent on any
-delivery failure.
+- A web UI, exposing inbound ports, or running an SSH server. This
+  image is shell-only by design.
+- Host bind-mounts for `/workspace`. Workspace is a named Docker volume.
+- Installing Cursor, Junie, or OpenCode CLIs. They were deliberately
+  excluded.
+- Switching to a profile / variant system. There is one curated tool
+  set, not a slim/full split.
+
+## Reference
+
+The full project spec lives outside this container at
+`specs/001-claude-shell-base/` in the source repo
+(<https://github.com/7Kronos/KroClaude>). You don't need to read it to
+operate inside the container.

@@ -10,7 +10,7 @@ Image tag versions are independent of the project constitution version.
 
 ### Added
 
-- Initial Coolify-deployable Docker image based on `node:22-bookworm-slim`.
+- Initial Coolify-deployable Docker image based on `node:24-bookworm-slim`.
 - Claude Code CLI installed via the official native installer.
 - Codex CLI (`@openai/codex`) and Gemini CLI (`@google/gemini-cli`).
 - Curated apt + npm + pip toolchain (see

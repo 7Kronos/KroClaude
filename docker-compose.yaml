@@ -13,16 +13,16 @@ services:
     container_name: kroclaude
     hostname: kroclaude
     restart: unless-stopped
-    shm_size: 2g
+    shm_size: 4g
 
     # FR-003b: headless Chromium needs SYS_ADMIN + SYS_PTRACE for its
     # namespace/sandbox model. NOT a blanket privileged-mode shortcut.
     cap_add:
-      - SYS_ADMIN   # FR-003b — Chromium sandbox
-      - SYS_PTRACE  # FR-003b — Chromium debugger probes
+      - SYS_ADMIN # FR-003b — Chromium sandbox
+      - SYS_PTRACE # FR-003b — Chromium debugger probes
     # FR-003b: relax seccomp for Chromium's syscall set on Bookworm.
     security_opt:
-      - seccomp=unconfined  # FR-003b — Chromium
+      - seccomp=unconfined # FR-003b — Chromium
 
     environment:
       # Required (no default — set in .env or Coolify secret).

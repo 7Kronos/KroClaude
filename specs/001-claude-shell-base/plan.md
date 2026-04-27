@@ -8,7 +8,7 @@
 Reproduce the HolyClaude environment as a stripped-down, Coolify-deployable
 docker-compose stack. The deliverable is a single container image carrying the
 Claude Code CLI, the Codex and Gemini CLIs, a curated developer toolchain, and
-headless-Chromium support — built on `node:22-bookworm-slim` with `s6-overlay`
+headless-Chromium support — built on `node:24-bookworm-slim` with `s6-overlay`
 v3 supervising the Xvfb display server. The CloudCLI web UI, manuals, two-tier
 profile system, and runtime UID/GID remap (`PUID`/`PGID`) are all out. State
 lives exclusively in two named Docker volumes (`kroclaude-config` and
@@ -25,7 +25,7 @@ preference for a single-process container.
 
 **Language/Version**: Dockerfile (BuildKit-compatible), Bash 5.x (Debian
 Bookworm), Python 3.11 (only used by `scripts/notify.py`)
-**Primary Dependencies**: Docker Engine 24+, Docker Compose v2, `node:22-bookworm-slim`
+**Primary Dependencies**: Docker Engine 24+, Docker Compose v2, `node:24-bookworm-slim`
 base image (pinned by digest at release), s6-overlay v3.2.0.2, Chromium (apt),
 Apprise (pip), Claude Code CLI (native installer), Codex CLI (`@openai/codex`
 npm), Gemini CLI (`@google/gemini-cli` npm)

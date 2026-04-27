@@ -1,18 +1,8 @@
 # syntax=docker/dockerfile:1.7
-# ==============================================================================
-# KroClaude — Reproducible Claude Code shell environment
-# Authoritative spec: specs/001-claude-shell-base/spec.md
-# Plan:               specs/001-claude-shell-base/plan.md
-# Inspired by HolyClaude (https://github.com/CoderLuii/HolyClaude); see
-# THIRD-PARTY-NOTICES for attribution.
-# ==============================================================================
+FROM node:24-bookworm-slim
 
-# At release time, replace this floating tag with a digest pin
-# (e.g. node:22-bookworm-slim@sha256:...). Constitution Principle I.
-FROM node:22-bookworm-slim
-
-LABEL org.opencontainers.image.source=https://github.com/krs/KroClaude
-LABEL org.opencontainers.image.description="Claude Code shell environment, deployable on Coolify"
+LABEL org.opencontainers.image.source=https://github.com/7Kronos/KroClaude
+LABEL org.opencontainers.image.description="Claude Code shell environment"
 
 # ---------- Build args ----------
 ARG S6_OVERLAY_VERSION=3.2.0.2
@@ -72,8 +62,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     apt-get update && apt-get install -y --no-install-recommends gh && \
     rm -rf /var/lib/apt/lists/*
 
-# ---------- bat symlink (Debian names it batcat) + locale ----------
+# ---------- bat / fd symlinks (Debian names them batcat / fdfind) + locale ----------
 RUN ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null || true && \
+    ln -sf /usr/bin/fdfind /usr/local/bin/fd 2>/dev/null || true && \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 
 # ---------- claude user (rename node@1000 → claude@1000) ----------
@@ -142,4 +133,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD pgrep -x Xvfb >/dev/null && command -v claude >/dev/null
 
 # ---------- s6-overlay as PID 1 via entrypoint ----------
+# PID 1 runs as root (required by s6-overlay /init for service supervision).
+# To get a `claude`-user shell, callers use `docker exec -u claude` (or set
+# the user in Coolify's terminal UI). Setting USER claude here would not
+# survive compose's `user:` override and would break s6 supervision; see
+# the smoke test for the user-experience assertion.
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -12,6 +12,9 @@ set -euo pipefail
 
 : "${COMPOSE:=docker compose}"
 SVC=kroclaude
+# Pin project name so volume names are deterministic regardless of cwd basename.
+export COMPOSE_PROJECT_NAME=kroclaude
+WS_VOL=kroclaude_kroclaude-workspace
 
 log()  { printf '\n[us2] %s\n' "$*"; }
 fail() { printf '[us2] FAIL: %s\n' "$*" >&2; $COMPOSE logs --no-color $SVC || true; exit 1; }
@@ -26,12 +29,12 @@ wait_healthy() {
     fail "container did not reach healthy in 60s"
 }
 
-cleanup() { $COMPOSE down -v >/dev/null 2>&1 || true; }
+cleanup() { $COMPOSE down --remove-orphans -v >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 # ---------- Scenario 1: empty-volume first boot ----------
 log "Scenario 1 — empty-volume first boot"
-$COMPOSE down -v >/dev/null 2>&1 || true
+$COMPOSE down --remove-orphans -v >/dev/null 2>&1 || true
 start=$(date +%s)
 $COMPOSE up -d
 wait_healthy
@@ -49,7 +52,7 @@ in_ctn 'test -f /home/claude/.gemini/settings.json' || fail "gemini settings.jso
 log "Scenario 2 — workspace persistence across down/up"
 in_ctn 'echo persist-token > /workspace/.us2-workspace-token'
 in_ctn 'echo persist-cred  > /home/claude/.claude/.us2-config-token'
-$COMPOSE down
+$COMPOSE down --remove-orphans
 $COMPOSE up -d
 wait_healthy
 in_ctn 'grep -q persist-token /workspace/.us2-workspace-token' || fail "workspace token lost across recreate"
@@ -57,18 +60,18 @@ in_ctn 'grep -q persist-cred  /home/claude/.claude/.us2-config-token' || fail "c
 
 # ---------- Scenario 3: image rebuild ----------
 log "Scenario 3 — image rebuild preserves volumes"
-$COMPOSE down
+$COMPOSE down --remove-orphans
 $COMPOSE build --no-cache >/dev/null
-$COMPOSE up -d
+$COMPOSE up -d --force-recreate
 wait_healthy
 in_ctn 'grep -q persist-token /workspace/.us2-workspace-token' || fail "workspace token lost across rebuild"
 in_ctn 'grep -q persist-cred  /home/claude/.claude/.us2-config-token' || fail "config token lost across rebuild"
 
 # ---------- Scenario 4: workspace wipe leaves config intact ----------
 log "Scenario 4 — workspace-only volume wipe preserves config"
-$COMPOSE down
-docker volume rm kroclaude-workspace >/dev/null
-$COMPOSE up -d
+$COMPOSE down --remove-orphans
+docker volume rm "$WS_VOL" >/dev/null
+$COMPOSE up -d --force-recreate
 wait_healthy
 in_ctn 'test ! -f /workspace/.us2-workspace-token' || fail "workspace token survived volume wipe (it should not)"
 in_ctn 'grep -q persist-cred /home/claude/.claude/.us2-config-token' || fail "config token lost during workspace wipe"

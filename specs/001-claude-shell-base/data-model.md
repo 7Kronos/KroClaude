@@ -12,7 +12,7 @@ in [contracts/](contracts/).
 | Field | Value / Constraint |
 |-------|--------------------|
 | Name (registry) | `ghcr.io/<owner>/kroclaude` (final org TBD at release) |
-| Base | `node:22-bookworm-slim` (pinned by digest at release) |
+| Base | `node:24-bookworm-slim` (pinned by digest at release) |
 | Architectures | `linux/amd64`, `linux/arm64` |
 | Tagging | semver: `1.0.0`, `1.0`, `1`, `latest` for stable; `main-<sha>` for development builds |
 | Default user (runtime) | `claude` (UID 1000, GID 1000 — fixed at build time) |
