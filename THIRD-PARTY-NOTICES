@@ -1,0 +1,63 @@
+# Third-Party Notices
+
+KroClaude is a derivative work inspired by HolyClaude. Components
+distributed within the KroClaude Docker image retain their original
+licenses.
+
+## HolyClaude (inspiration)
+
+- License: MIT
+- Copyright: 2026 CoderLuii
+- Source: https://github.com/CoderLuii/HolyClaude
+
+KroClaude reuses the HolyClaude project's structural approach (Dockerfile
+layout, s6-overlay supervisor pattern, Apprise notification helper, and
+documentation/configuration patterns) under the terms of HolyClaude's MIT
+license. KroClaude does not redistribute the HolyClaude source code; it
+re-implements the in-scope subset (per
+`specs/001-claude-shell-base/spec.md`) with deliberate divergences:
+
+- The `@siteboon/claude-code-ui` ("CloudCLI") web UI and its plugins are
+  NOT bundled in KroClaude. The CloudCLI patches HolyClaude applies to
+  that bundle are correspondingly absent here.
+- Several optional CLIs and packages (Cursor, Junie, OpenCode, Azure CLI,
+  Wrangler, Vercel, Netlify CLI, PM2, Prisma, Drizzle, etc.) are not
+  installed.
+- The slim/full profile system is removed.
+- The runtime UID/GID remap (`PUID`/`PGID`) is removed; KroClaude uses
+  named Docker volumes only.
+
+## s6-overlay
+
+- License: ISC
+- Source: https://github.com/just-containers/s6-overlay
+
+Distributed unmodified in the image.
+
+## Node.js (base image)
+
+- License: MIT
+- Source: https://github.com/nodejs/node
+
+## Chromium
+
+- License: BSD-3-Clause (and component licenses; see Chromium's
+  third-party manifest)
+- Source: https://www.chromium.org/
+
+## Apprise
+
+- License: BSD-2-Clause
+- Source: https://github.com/caronc/apprise
+
+Used by `scripts/notify.py` for opt-in notifications.
+
+## AI Assistant CLIs
+
+- Claude Code CLI — terms at https://claude.com/
+- `@openai/codex` — terms at https://github.com/openai/codex
+- `@google/gemini-cli` — terms at https://github.com/google-gemini/gemini-cli
+
+For a complete list of installed packages and their licenses, inspect
+the built image (`docker history`, `dpkg -l`, `npm ls -g`, `pip list`)
+or refer to the `Dockerfile`.

@@ -1,0 +1,39 @@
+# Source control
+.git/
+.gitignore
+
+# Spec Kit & docs (not needed in build context)
+.specify/
+specs/
+README.md
+CHANGELOG.md
+THIRD-PARTY-NOTICES
+LICENSE
+
+# CI
+.github/
+
+# Tests (run against the built image, not baked into it)
+tests/
+
+# Editor & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Runtime data
+data/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Compose (the file is read by `docker compose`, not by `docker build`)
+docker-compose.yaml
+docker-compose.override.yaml
+docker-compose.override.yml
