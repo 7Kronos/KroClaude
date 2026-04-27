@@ -1,10 +1,14 @@
 <!-- SPECKIT START -->
-Active feature: `001-claude-shell-base` (KroClaude base image).
+Active feature: `002-skill-bundling` (bundle skills with the image).
 For technologies, project structure, shell commands, and other context,
-read the current implementation plan: [specs/001-claude-shell-base/plan.md](specs/001-claude-shell-base/plan.md).
-Companion artifacts: [spec.md](specs/001-claude-shell-base/spec.md),
-[research.md](specs/001-claude-shell-base/research.md),
-[data-model.md](specs/001-claude-shell-base/data-model.md),
-[quickstart.md](specs/001-claude-shell-base/quickstart.md),
-[contracts/](specs/001-claude-shell-base/contracts/).
+read the current implementation plan: [specs/002-skill-bundling/plan.md](specs/002-skill-bundling/plan.md).
+Companion artifacts: [spec.md](specs/002-skill-bundling/spec.md),
+[research.md](specs/002-skill-bundling/research.md),
+[data-model.md](specs/002-skill-bundling/data-model.md),
+[quickstart.md](specs/002-skill-bundling/quickstart.md),
+[contracts/](specs/002-skill-bundling/contracts/).
+
+Prior feature reference: `001-claude-shell-base` —
+[specs/001-claude-shell-base/](specs/001-claude-shell-base/) — base
+image, compose, entrypoint, and the existing smoke suite.
 <!-- SPECKIT END -->
