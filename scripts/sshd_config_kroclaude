@@ -1,0 +1,55 @@
+# KroClaude SSH server — key-only, claude-only, hardened.
+# Authoritative spec:     specs/003-ssh-access/spec.md
+# Authoritative contract: specs/003-ssh-access/contracts/sshd-config.md
+# Authoritative research: specs/003-ssh-access/research.md §R2
+#
+# Anything not set here accepts the upstream OpenSSH default.
+
+# ----- Listen -----
+Port 2221
+AddressFamily any
+ListenAddress 0.0.0.0
+ListenAddress ::
+
+# ----- Host keys (persisted in the kroclaude-config volume) -----
+HostKey /home/claude/.claude/.ssh-host-keys/ssh_host_ed25519_key
+HostKey /home/claude/.claude/.ssh-host-keys/ssh_host_rsa_key
+
+# ----- Authentication: pubkey only, claude only -----
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+HostbasedAuthentication no
+PermitEmptyPasswords no
+PermitRootLogin no
+AllowUsers claude
+AuthenticationMethods publickey
+
+# ----- PAM session-only (auth side is unreachable; see research R2) -----
+UsePAM yes
+
+# ----- Session features -----
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding yes
+PermitTunnel no
+PrintMotd no
+PrintLastLog no
+TCPKeepAlive yes
+ClientAliveInterval 60
+ClientAliveCountMax 3
+
+# ----- Logging -----
+LogLevel VERBOSE
+SyslogFacility AUTH
+
+# ----- Cryptography (Mozilla "modern") -----
+KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,sntrup761x25519-sha512@openssh.com
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+MACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128-etm@openssh.com
+HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
+
+# ----- Misc -----
+StrictModes yes
+Subsystem sftp internal-sftp

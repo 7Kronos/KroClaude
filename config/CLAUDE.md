@@ -54,10 +54,18 @@ environment variables. Do not reconfigure unless explicitly asked.
 `~/.claude/notify-on` exists AND at least one `NOTIFY_*` env var is set.
 You don't need to act on this — it's ambient.
 
+## Remote access
+
+An SSH server runs on container port `2221` (default host port `2221`,
+overridable via `KROCLAUDE_SSH_HOST_PORT`). Authentication is
+public-key only; the operator configures authorized keys via the
+`KROCLAUDE_SSH_AUTHORIZED_KEY` environment variable. Password auth,
+keyboard-interactive auth, and root login are disabled.
+
 ## Out of scope — do not propose
 
-- A web UI, exposing inbound ports, or running an SSH server. This
-  image is shell-only by design.
+- A web UI or any inbound port other than `2221/tcp` (SSH). The image
+  remains shell-only at the application layer.
 - Host bind-mounts for `/workspace`. Workspace is a named Docker volume.
 - Installing Cursor, Junie, or OpenCode CLIs. They were deliberately
   excluded.

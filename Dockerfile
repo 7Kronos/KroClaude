@@ -45,8 +45,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     strace lsof iproute2 procps htop \
     # Database clients
     postgresql-client redis-tools sqlite3 \
-    # SSH client (NOT server)
-    openssh-client \
+    # SSH client + server (server added in feature 003-ssh-access)
+    openssh-client openssh-server \
     # Media
     imagemagick ffmpeg \
     && rm -rf /var/lib/apt/lists/*
@@ -112,6 +112,15 @@ COPY s6-overlay/s6-rc.d/xvfb/run  /etc/s6-overlay/s6-rc.d/xvfb/run
 RUN chmod +x /etc/s6-overlay/s6-rc.d/xvfb/run && \
     touch /etc/s6-overlay/s6-rc.d/user/contents.d/xvfb
 
+# ---------- SSH server (feature 003-ssh-access) ----------
+# Hardened sshd config (key-only, claude-only, Mozilla "modern" crypto).
+# See specs/003-ssh-access/contracts/sshd-config.md for the contract.
+COPY scripts/sshd_config_kroclaude    /etc/ssh/sshd_config_kroclaude
+COPY s6-overlay/s6-rc.d/sshd/type     /etc/s6-overlay/s6-rc.d/sshd/type
+COPY s6-overlay/s6-rc.d/sshd/run      /etc/s6-overlay/s6-rc.d/sshd/run
+RUN chmod +x /etc/s6-overlay/s6-rc.d/sshd/run && \
+    touch /etc/s6-overlay/s6-rc.d/user/contents.d/sshd
+
 # ---------- Helper scripts and default configs ----------
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/notify.py     /usr/local/bin/notify.py
@@ -136,8 +145,11 @@ RUN printf '\nexport HISTFILE=/home/claude/.claude/.bash_history\nexport HISTSIZ
 WORKDIR /workspace
 
 # ---------- Health check (contracts/healthcheck.md) ----------
+# Extended in feature 003-ssh-access: also requires sshd to be listening on 2221.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD pgrep -x Xvfb >/dev/null && command -v claude >/dev/null
+    CMD pgrep -x Xvfb >/dev/null \
+     && command -v claude >/dev/null \
+     && bash -c '</dev/tcp/127.0.0.1/2221' 2>/dev/null
 
 # ---------- s6-overlay as PID 1 via entrypoint ----------
 # PID 1 runs as root (required by s6-overlay /init for service supervision).

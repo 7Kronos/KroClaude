@@ -36,6 +36,9 @@ jobs:
       - name: Smoke — US3 (notifications opt-in / silent-fail)
         run: bash tests/smoke/test_us3.sh
 
+      - name: Smoke — US4 (SSH access)
+        run: bash tests/smoke/test_us4.sh
+
       - name: Dump container logs on failure
         if: failure()
         run: |

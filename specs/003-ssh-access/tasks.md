@@ -36,8 +36,8 @@ Modified existing files: `Dockerfile`, `scripts/entrypoint.sh`, `docker-compose.
 
 **Purpose**: scaffold the new files and the s6 service directory before the foundational changes wire them up.
 
-- [ ] T001 Create the directory `s6-overlay/s6-rc.d/sshd/` (mirroring the existing `s6-overlay/s6-rc.d/xvfb/` layout). It will hold `type` and `run` (T005, T006).
-- [ ] T002 [P] Verify [`.dockerignore`](../../.dockerignore) does NOT exclude `scripts/sshd_config_kroclaude` or `s6-overlay/s6-rc.d/sshd/`. Existing patterns shouldn't catch them, but confirm with `docker compose --env-file /dev/null config` after later steps land.
+- [x] T001 Create the directory `s6-overlay/s6-rc.d/sshd/` (mirroring the existing `s6-overlay/s6-rc.d/xvfb/` layout). It will hold `type` and `run` (T005, T006).
+- [x] T002 [P] Verify [`.dockerignore`](../../.dockerignore) does NOT exclude `scripts/sshd_config_kroclaude` or `s6-overlay/s6-rc.d/sshd/`. Existing patterns shouldn't catch them, but confirm with `docker compose --env-file /dev/null config` after later steps land.
 
 ---
 
@@ -47,12 +47,12 @@ Modified existing files: `Dockerfile`, `scripts/entrypoint.sh`, `docker-compose.
 
 **⚠️ CRITICAL**: No US task can begin until this phase is complete.
 
-- [ ] T003 In [`Dockerfile`](../../Dockerfile): add `openssh-server` to the existing apt install list (the one that already contains `openssh-client`). Keep alphabetic / category grouping — `openssh-server` goes next to `openssh-client` under the SSH category. Per [research.md §R1](research.md).
-- [ ] T004 [P] Write [`scripts/sshd_config_kroclaude`](../../scripts/sshd_config_kroclaude) with the verbatim required-directives block from [contracts/sshd-config.md](contracts/sshd-config.md). Header comment: "KroClaude SSH server — key-only, claude-only, hardened." Includes the two `HostKey` paths, all `*Authentication no` lines, `PermitRootLogin no`, `AllowUsers claude`, modern cipher / KEX / MAC lists, and `Subsystem sftp internal-sftp`.
-- [ ] T005 [P] Write [`s6-overlay/s6-rc.d/sshd/type`](../../s6-overlay/s6-rc.d/sshd/type) containing the single line `longrun`.
-- [ ] T006 [P] Write [`s6-overlay/s6-rc.d/sshd/run`](../../s6-overlay/s6-rc.d/sshd/run) — a one-line shell script: `#!/bin/sh` shebang, `exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config_kroclaude`. Mark executable (`chmod +x` happens in the Dockerfile, T007).
-- [ ] T007 In [`Dockerfile`](../../Dockerfile): after the existing `xvfb` service activation, add (a) `COPY scripts/sshd_config_kroclaude /etc/ssh/sshd_config_kroclaude`, (b) `COPY s6-overlay/s6-rc.d/sshd/type /etc/s6-overlay/s6-rc.d/sshd/type`, (c) `COPY s6-overlay/s6-rc.d/sshd/run /etc/s6-overlay/s6-rc.d/sshd/run`, (d) `RUN chmod +x /etc/s6-overlay/s6-rc.d/sshd/run && touch /etc/s6-overlay/s6-rc.d/user/contents.d/sshd`. Per [research.md §R3](research.md).
-- [ ] T008 In [`Dockerfile`](../../Dockerfile): replace the existing `HEALTHCHECK` block with the extended form from [contracts/healthcheck.md](contracts/healthcheck.md):
+- [x] T003 In [`Dockerfile`](../../Dockerfile): add `openssh-server` to the existing apt install list (the one that already contains `openssh-client`). Keep alphabetic / category grouping — `openssh-server` goes next to `openssh-client` under the SSH category. Per [research.md §R1](research.md).
+- [x] T004 [P] Write [`scripts/sshd_config_kroclaude`](../../scripts/sshd_config_kroclaude) with the verbatim required-directives block from [contracts/sshd-config.md](contracts/sshd-config.md). Header comment: "KroClaude SSH server — key-only, claude-only, hardened." Includes the two `HostKey` paths, all `*Authentication no` lines, `PermitRootLogin no`, `AllowUsers claude`, modern cipher / KEX / MAC lists, and `Subsystem sftp internal-sftp`.
+- [x] T005 [P] Write [`s6-overlay/s6-rc.d/sshd/type`](../../s6-overlay/s6-rc.d/sshd/type) containing the single line `longrun`.
+- [x] T006 [P] Write [`s6-overlay/s6-rc.d/sshd/run`](../../s6-overlay/s6-rc.d/sshd/run) — a one-line shell script: `#!/bin/sh` shebang, `exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config_kroclaude`. Mark executable (`chmod +x` happens in the Dockerfile, T007).
+- [x] T007 In [`Dockerfile`](../../Dockerfile): after the existing `xvfb` service activation, add (a) `COPY scripts/sshd_config_kroclaude /etc/ssh/sshd_config_kroclaude`, (b) `COPY s6-overlay/s6-rc.d/sshd/type /etc/s6-overlay/s6-rc.d/sshd/type`, (c) `COPY s6-overlay/s6-rc.d/sshd/run /etc/s6-overlay/s6-rc.d/sshd/run`, (d) `RUN chmod +x /etc/s6-overlay/s6-rc.d/sshd/run && touch /etc/s6-overlay/s6-rc.d/user/contents.d/sshd`. Per [research.md §R3](research.md).
+- [x] T008 In [`Dockerfile`](../../Dockerfile): replace the existing `HEALTHCHECK` block with the extended form from [contracts/healthcheck.md](contracts/healthcheck.md):
 
   ```dockerfile
   HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
@@ -63,7 +63,7 @@ Modified existing files: `Dockerfile`, `scripts/entrypoint.sh`, `docker-compose.
 
   Cadence (`--interval`, `--timeout`, `--start-period`, `--retries`) is unchanged. Per FR-011.
 
-- [ ] T009 In [`scripts/entrypoint.sh`](../../scripts/entrypoint.sh): append a new stanza AFTER the existing bundled-skill reflection (feature 002) and BEFORE the `exec /init "$@"` line. Stanza body (per [research.md §R4, §R5](research.md)):
+- [x] T009 In [`scripts/entrypoint.sh`](../../scripts/entrypoint.sh): append a new stanza AFTER the existing bundled-skill reflection (feature 002) and BEFORE the `exec /init "$@"` line. Stanza body (per [research.md §R4, §R5](research.md)):
 
   ```bash
   # ---------- SSH host keys + authorized_keys seeding (feature 003) ----------
@@ -92,9 +92,9 @@ Modified existing files: `Dockerfile`, `scripts/entrypoint.sh`, `docker-compose.
 
   The stanza inherits the script's `set -euo pipefail`. Host-key generation is one-shot (FR-009 fingerprint stability); authorized_keys reseeding is every-boot (FR-007).
 
-- [ ] T010 In [`docker-compose.yaml`](../../docker-compose.yaml): (a) add a top-level `ports:` block to the `kroclaude` service: `- "${KROCLAUDE_SSH_HOST_PORT:-2221}:2221"` with an inline comment "Feature 003 — SSH access. Host port overridable via env."; (b) add two new entries to the existing `environment:` block: `KROCLAUDE_SSH_AUTHORIZED_KEY: "${KROCLAUDE_SSH_AUTHORIZED_KEY:-}"` and `KROCLAUDE_SSH_HOST_PORT: "${KROCLAUDE_SSH_HOST_PORT:-2221}"`. Per [contracts/compose-environment.md](contracts/compose-environment.md). Do NOT add any new `cap_add` or `security_opt` (FR-015).
-- [ ] T011 [P] In [`.env.example`](../../.env.example): append the two new variables documented in [contracts/compose-environment.md §`.env.example` delta](contracts/compose-environment.md). Header comment: "Optional: SSH access (feature 003-ssh-access)". Both values empty/default in the committed file (FR-016 — no real keys committed).
-- [ ] T012 [P] In [`config/CLAUDE.md`](../../config/CLAUDE.md): in the "Out of scope — do not propose" section, REMOVE the line "A web UI, exposing inbound ports, or running an SSH server. This image is shell-only by design." and REPLACE it (in the same section, OR move to an affirmative section) with: "An SSH server is available on container port 2221 with public-key-only auth (env var `KROCLAUDE_SSH_AUTHORIZED_KEY`). Web UIs and other inbound ports remain out of scope." Per FR-014. Keep the rest of the "do not propose" list intact.
+- [x] T010 In [`docker-compose.yaml`](../../docker-compose.yaml): (a) add a top-level `ports:` block to the `kroclaude` service: `- "${KROCLAUDE_SSH_HOST_PORT:-2221}:2221"` with an inline comment "Feature 003 — SSH access. Host port overridable via env."; (b) add two new entries to the existing `environment:` block: `KROCLAUDE_SSH_AUTHORIZED_KEY: "${KROCLAUDE_SSH_AUTHORIZED_KEY:-}"` and `KROCLAUDE_SSH_HOST_PORT: "${KROCLAUDE_SSH_HOST_PORT:-2221}"`. Per [contracts/compose-environment.md](contracts/compose-environment.md). Do NOT add any new `cap_add` or `security_opt` (FR-015).
+- [x] T011 [P] In [`.env.example`](../../.env.example): append the two new variables documented in [contracts/compose-environment.md §`.env.example` delta](contracts/compose-environment.md). Header comment: "Optional: SSH access (feature 003-ssh-access)". Both values empty/default in the committed file (FR-016 — no real keys committed).
+- [x] T012 [P] In [`config/CLAUDE.md`](../../config/CLAUDE.md): in the "Out of scope — do not propose" section, REMOVE the line "A web UI, exposing inbound ports, or running an SSH server. This image is shell-only by design." and REPLACE it (in the same section, OR move to an affirmative section) with: "An SSH server is available on container port 2221 with public-key-only auth (env var `KROCLAUDE_SSH_AUTHORIZED_KEY`). Web UIs and other inbound ports remain out of scope." Per FR-014. Keep the rest of the "do not propose" list intact.
 
 **Checkpoint**: foundation ready — Phase 3+ user-story work can begin.
 
@@ -106,9 +106,9 @@ Modified existing files: `Dockerfile`, `scripts/entrypoint.sh`, `docker-compose.
 
 **Independent Test**: per [spec.md US1 Independent Test](spec.md). The smoke test generates a throwaway ed25519 keypair, plumbs the public part through `KROCLAUDE_SSH_AUTHORIZED_KEY`, brings the stack up, and verifies the positive auth path end-to-end.
 
-- [ ] T013 [US1] Write [`tests/smoke/test_us4.sh`](../../tests/smoke/test_us4.sh) shebang and harness: `set -euo pipefail`; `: "${COMPOSE:=docker compose}"`; `SVC=kroclaude`; `export COMPOSE_PROJECT_NAME=kroclaude`; `log()`, `fail()`, `wait_healthy()` (matching the existing test_us2.sh shape); a `TMP_DIR=$(mktemp -d)` step; `ssh-keygen -t ed25519 -N '' -f "$TMP_DIR/id_test1" -q` to generate the first throwaway keypair; an `ssh_test()` helper that wraps `ssh -i $key -p $port -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes claude@127.0.0.1 -- "$@"`; cleanup trap that runs `$COMPOSE down --remove-orphans -v` and `rm -rf $TMP_DIR`.
-- [ ] T014 [US1] In `tests/smoke/test_us4.sh`: bring up the stack with the test key plumbed in. `KROCLAUDE_SSH_AUTHORIZED_KEY=$(cat "$TMP_DIR/id_test1.pub") $COMPOSE up -d --force-recreate`. Then `wait_healthy` (which now also exercises the SSH listener via the extended healthcheck — FR-011).
-- [ ] T015 [US1] In `tests/smoke/test_us4.sh`: positive-auth assertion. `ssh_test "$TMP_DIR/id_test1" 2221 "claude --version" >/tmp/us4_claude_version 2>&1` MUST exit 0; `grep -qE 'Claude Code|^[0-9]+\.[0-9]+\.[0-9]+' /tmp/us4_claude_version` MUST find the CLI's version line. Plus assert `ssh_test "$TMP_DIR/id_test1" 2221 "pwd"` returns `/workspace` (per data-model "Working dir on login"). Plus assert `ssh_test "$TMP_DIR/id_test1" 2221 "id -un"` returns `claude` (FR-005).
+- [x] T013 [US1] Write [`tests/smoke/test_us4.sh`](../../tests/smoke/test_us4.sh) shebang and harness: `set -euo pipefail`; `: "${COMPOSE:=docker compose}"`; `SVC=kroclaude`; `export COMPOSE_PROJECT_NAME=kroclaude`; `log()`, `fail()`, `wait_healthy()` (matching the existing test_us2.sh shape); a `TMP_DIR=$(mktemp -d)` step; `ssh-keygen -t ed25519 -N '' -f "$TMP_DIR/id_test1" -q` to generate the first throwaway keypair; an `ssh_test()` helper that wraps `ssh -i $key -p $port -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes claude@127.0.0.1 -- "$@"`; cleanup trap that runs `$COMPOSE down --remove-orphans -v` and `rm -rf $TMP_DIR`.
+- [x] T014 [US1] In `tests/smoke/test_us4.sh`: bring up the stack with the test key plumbed in. `KROCLAUDE_SSH_AUTHORIZED_KEY=$(cat "$TMP_DIR/id_test1.pub") $COMPOSE up -d --force-recreate`. Then `wait_healthy` (which now also exercises the SSH listener via the extended healthcheck — FR-011).
+- [x] T015 [US1] In `tests/smoke/test_us4.sh`: positive-auth assertion. `ssh_test "$TMP_DIR/id_test1" 2221 "claude --version" >/tmp/us4_claude_version 2>&1` MUST exit 0; `grep -qE 'Claude Code|^[0-9]+\.[0-9]+\.[0-9]+' /tmp/us4_claude_version` MUST find the CLI's version line. Plus assert `ssh_test "$TMP_DIR/id_test1" 2221 "pwd"` returns `/workspace` (per data-model "Working dir on login"). Plus assert `ssh_test "$TMP_DIR/id_test1" 2221 "id -un"` returns `claude` (FR-005).
 
 **Checkpoint**: User Story 1 fully functional and testable independently. Stop here to demo the MVP if desired.
 
@@ -120,10 +120,10 @@ Modified existing files: `Dockerfile`, `scripts/entrypoint.sh`, `docker-compose.
 
 **Independent Test**: per [spec.md US2 Independent Test](spec.md). The smoke test rotates keys and verifies "latest env wins, no merging" + multi-key support.
 
-- [ ] T016 [US2] In `tests/smoke/test_us4.sh`: generate a SECOND throwaway keypair: `ssh-keygen -t ed25519 -N '' -f "$TMP_DIR/id_test2" -q`. Restart the stack with ONLY key 2 in env: `KROCLAUDE_SSH_AUTHORIZED_KEY=$(cat "$TMP_DIR/id_test2.pub") $COMPOSE up -d --force-recreate`; `wait_healthy`.
-- [ ] T017 [US2] In `tests/smoke/test_us4.sh`: rotation assertion. `ssh_test "$TMP_DIR/id_test2" 2221 'true'` MUST exit 0 (new key works). `ssh_test "$TMP_DIR/id_test1" 2221 'true'` MUST exit non-zero (old key now rejected) — confirms FR-007 "fully replacing any previous contents", spec edge case "Key changes at runtime".
-- [ ] T018 [US2] In `tests/smoke/test_us4.sh`: multi-key support. Restart with BOTH keys in env (one per line): `KROCLAUDE_SSH_AUTHORIZED_KEY="$(cat "$TMP_DIR/id_test1.pub")"$'\n'"$(cat "$TMP_DIR/id_test2.pub")" $COMPOSE up -d --force-recreate`; `wait_healthy`. Assert BOTH `ssh_test "$TMP_DIR/id_test1" 2221 'true'` AND `ssh_test "$TMP_DIR/id_test2" 2221 'true'` exit 0 — confirms FR-006 multi-key support.
-- [ ] T019 [US2] In `tests/smoke/test_us4.sh`: env-secret hygiene assertion. `docker history --no-trunc --format '{{.CreatedBy}}' kroclaude:dev | grep -F "$(cat "$TMP_DIR/id_test1.pub" | awk '{print $2}')"` MUST exit non-zero (the key MUST NOT appear in the image's layer history) — confirms FR-012 / SC-005.
+- [x] T016 [US2] In `tests/smoke/test_us4.sh`: generate a SECOND throwaway keypair: `ssh-keygen -t ed25519 -N '' -f "$TMP_DIR/id_test2" -q`. Restart the stack with ONLY key 2 in env: `KROCLAUDE_SSH_AUTHORIZED_KEY=$(cat "$TMP_DIR/id_test2.pub") $COMPOSE up -d --force-recreate`; `wait_healthy`.
+- [x] T017 [US2] In `tests/smoke/test_us4.sh`: rotation assertion. `ssh_test "$TMP_DIR/id_test2" 2221 'true'` MUST exit 0 (new key works). `ssh_test "$TMP_DIR/id_test1" 2221 'true'` MUST exit non-zero (old key now rejected) — confirms FR-007 "fully replacing any previous contents", spec edge case "Key changes at runtime".
+- [x] T018 [US2] In `tests/smoke/test_us4.sh`: multi-key support. Restart with BOTH keys in env (one per line): `KROCLAUDE_SSH_AUTHORIZED_KEY="$(cat "$TMP_DIR/id_test1.pub")"$'\n'"$(cat "$TMP_DIR/id_test2.pub")" $COMPOSE up -d --force-recreate`; `wait_healthy`. Assert BOTH `ssh_test "$TMP_DIR/id_test1" 2221 'true'` AND `ssh_test "$TMP_DIR/id_test2" 2221 'true'` exit 0 — confirms FR-006 multi-key support.
+- [x] T019 [US2] In `tests/smoke/test_us4.sh`: env-secret hygiene assertion. `docker history --no-trunc --format '{{.CreatedBy}}' kroclaude:dev | grep -F "$(cat "$TMP_DIR/id_test1.pub" | awk '{print $2}')"` MUST exit non-zero (the key MUST NOT appear in the image's layer history) — confirms FR-012 / SC-005.
 
 **Checkpoint**: US1 and US2 fully functional.
 
@@ -135,9 +135,9 @@ Modified existing files: `Dockerfile`, `scripts/entrypoint.sh`, `docker-compose.
 
 **Independent Test**: per [spec.md US3 Independent Test](spec.md).
 
-- [ ] T020 [US3] In `tests/smoke/test_us4.sh`: password-auth rejection. `ssh -p 2221 -o PreferredAuthentications=password -o NumberOfPasswordPrompts=0 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes claude@127.0.0.1 'true' 2>&1 | tee /tmp/us4_pw.log; rc=${PIPESTATUS[0]}` — assert `[ "$rc" != 0 ]` AND `! grep -qi 'password:' /tmp/us4_pw.log` (no password prompt was ever shown). Per FR-003 + SC-003.
-- [ ] T021 [US3] In `tests/smoke/test_us4.sh`: root-login rejection. `ssh -i "$TMP_DIR/id_test1" -p 2221 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes root@127.0.0.1 'true' 2>&1 | tee /tmp/us4_root.log; rc=${PIPESTATUS[0]}` — assert `[ "$rc" != 0 ]`. Per FR-004 + SC-003.
-- [ ] T022 [US3] In `tests/smoke/test_us4.sh`: wrong-key rejection. Generate a THIRD throwaway keypair (`id_test3`) that is NOT plumbed through env. `ssh_test "$TMP_DIR/id_test3" 2221 'true' 2>&1 | tee /tmp/us4_wrongkey.log; rc=${PIPESTATUS[0]}` — assert `[ "$rc" != 0 ]` AND `grep -q 'Permission denied (publickey)' /tmp/us4_wrongkey.log`. Per spec US3 acceptance scenario 3 + SC-003.
+- [x] T020 [US3] In `tests/smoke/test_us4.sh`: password-auth rejection. `ssh -p 2221 -o PreferredAuthentications=password -o NumberOfPasswordPrompts=0 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes claude@127.0.0.1 'true' 2>&1 | tee /tmp/us4_pw.log; rc=${PIPESTATUS[0]}` — assert `[ "$rc" != 0 ]` AND `! grep -qi 'password:' /tmp/us4_pw.log` (no password prompt was ever shown). Per FR-003 + SC-003.
+- [x] T021 [US3] In `tests/smoke/test_us4.sh`: root-login rejection. `ssh -i "$TMP_DIR/id_test1" -p 2221 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes root@127.0.0.1 'true' 2>&1 | tee /tmp/us4_root.log; rc=${PIPESTATUS[0]}` — assert `[ "$rc" != 0 ]`. Per FR-004 + SC-003.
+- [x] T022 [US3] In `tests/smoke/test_us4.sh`: wrong-key rejection. Generate a THIRD throwaway keypair (`id_test3`) that is NOT plumbed through env. `ssh_test "$TMP_DIR/id_test3" 2221 'true' 2>&1 | tee /tmp/us4_wrongkey.log; rc=${PIPESTATUS[0]}` — assert `[ "$rc" != 0 ]` AND `grep -q 'Permission denied (publickey)' /tmp/us4_wrongkey.log`. Per spec US3 acceptance scenario 3 + SC-003.
 
 **Checkpoint**: all three user stories independently functional. The full positive + negative SSH surface is covered.
 
@@ -147,9 +147,9 @@ Modified existing files: `Dockerfile`, `scripts/entrypoint.sh`, `docker-compose.
 
 **Purpose**: docs, CI integration, traceability audits.
 
-- [ ] T023 [P] In [`CHANGELOG.md`](../../CHANGELOG.md): add an entry under `[Unreleased]` describing the SSH access feature. Mention: new env vars `KROCLAUDE_SSH_AUTHORIZED_KEY` and `KROCLAUDE_SSH_HOST_PORT` (default 2221); the **MINOR** semver bump rationale (additive, no breaking change to volume layout or compose-env contract); the explicit amendment of feature 001 FR-003 (SSH category was client-only) and feature 001 research §R2 (SSH server was rejected). Per FR-013.
-- [ ] T024 [P] In [`README.md`](../../README.md): add a "Remote SSH access" section after the existing "Bundled skills" section, pointing to [`specs/003-ssh-access/quickstart.md`](quickstart.md) and noting the default port (2221) + that auth is key-only.
-- [ ] T025 [P] In [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml): add a "Smoke — US4 (SSH access)" step in the `build-and-smoke` job, running `bash tests/smoke/test_us4.sh` after the existing US3 smoke. Place the step BEFORE the failure-artifact upload steps so logs from test_us4.sh are captured if it fails.
+- [x] T023 [P] In [`CHANGELOG.md`](../../CHANGELOG.md): add an entry under `[Unreleased]` describing the SSH access feature. Mention: new env vars `KROCLAUDE_SSH_AUTHORIZED_KEY` and `KROCLAUDE_SSH_HOST_PORT` (default 2221); the **MINOR** semver bump rationale (additive, no breaking change to volume layout or compose-env contract); the explicit amendment of feature 001 FR-003 (SSH category was client-only) and feature 001 research §R2 (SSH server was rejected). Per FR-013.
+- [x] T024 [P] In [`README.md`](../../README.md): add a "Remote SSH access" section after the existing "Bundled skills" section, pointing to [`specs/003-ssh-access/quickstart.md`](quickstart.md) and noting the default port (2221) + that auth is key-only.
+- [x] T025 [P] In [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml): add a "Smoke — US4 (SSH access)" step in the `build-and-smoke` job, running `bash tests/smoke/test_us4.sh` after the existing US3 smoke. Place the step BEFORE the failure-artifact upload steps so logs from test_us4.sh are captured if it fails.
 
 ---
 

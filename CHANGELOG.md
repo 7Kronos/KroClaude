@@ -10,6 +10,34 @@ Image tag versions are independent of the project constitution version.
 
 ### Added
 
+- **Remote SSH access** (feature 003-ssh-access): the image now runs a
+  hardened OpenSSH server on container port `2221`, published to the
+  host on the same port by default (override via
+  `KROCLAUDE_SSH_HOST_PORT`). Authentication is **public-key only** —
+  password, keyboard-interactive, PAM-challenge, and host-based auth
+  are all disabled at the sshd level; root login is disabled; only
+  the `claude` user is allowed in. The authorized public key(s) come
+  from the `KROCLAUDE_SSH_AUTHORIZED_KEY` environment variable
+  (Coolify-friendly, multi-key supported one-per-line) and are
+  reseeded on every container start (latest env wins). SSH host keys
+  persist in the existing `kroclaude-config` named volume so client
+  fingerprints stay stable across rebuilds. See
+  [`specs/003-ssh-access/`](specs/003-ssh-access/) for spec, plan,
+  and contracts.
+  - Semver impact: **MINOR** (additive — no breaking change to
+    volume layout or compose-environment contract; the new port and
+    env vars are additive). Per
+    [`specs/003-ssh-access/research.md`](specs/003-ssh-access/research.md) §R6
+    (inherited from feature 002's policy).
+  - **Amends prior decisions**: feature 001 FR-003 (SSH category was
+    `openssh-client` only) and feature 001 research §R2 (SSH server
+    rejected). Both reversed here with explicit security mitigations
+    enumerated in feature 003 FR-003..FR-005 + FR-012.
+  - Smoke verification: new `tests/smoke/test_us4.sh` exercises
+    positive auth + key rotation + multi-key + password / root /
+    wrong-key rejection paths using throwaway ed25519 keypairs under
+    `mktemp -d`.
+
 - **Bundled skills**: image now ships Claude Code skills under
   `skills/` at the repo root and reflects them into the persistent
   `~/.claude/skills/` directory on every container start. User-installed

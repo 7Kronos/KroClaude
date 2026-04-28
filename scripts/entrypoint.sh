@@ -106,6 +106,31 @@ if [ -d "$SKILLS_SRC" ] && [ -n "$(ls -A "$SKILLS_SRC" 2>/dev/null)" ]; then
     done
 fi
 
+# ---------- SSH host keys + authorized_keys seeding (feature 003-ssh-access) ----------
+# Host keys are generated ONCE (FR-009 fingerprint stability) inside the
+# kroclaude-config volume so they survive container recreation.
+# authorized_keys is reseeded from KROCLAUDE_SSH_AUTHORIZED_KEY on EVERY
+# boot (FR-007 — latest env wins; NOT sentinel-guarded).
+SSH_HOST_KEY_DIR="$CONFIG_DIR/.ssh-host-keys"
+install -d -m 0700 -o claude -g claude "$SSH_HOST_KEY_DIR"
+if [ ! -f "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key" ]; then
+    ssh-keygen -t ed25519 -N '' -f "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key" >/dev/null
+    chown claude:claude "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key" "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key.pub"
+    chmod 0600 "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key"
+    chmod 0644 "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key.pub"
+fi
+if [ ! -f "$SSH_HOST_KEY_DIR/ssh_host_rsa_key" ]; then
+    ssh-keygen -t rsa -b 3072 -N '' -f "$SSH_HOST_KEY_DIR/ssh_host_rsa_key" >/dev/null
+    chown claude:claude "$SSH_HOST_KEY_DIR/ssh_host_rsa_key" "$SSH_HOST_KEY_DIR/ssh_host_rsa_key.pub"
+    chmod 0600 "$SSH_HOST_KEY_DIR/ssh_host_rsa_key"
+    chmod 0644 "$SSH_HOST_KEY_DIR/ssh_host_rsa_key.pub"
+fi
+
+install -d -m 0700 -o claude -g claude "$CLAUDE_HOME/.ssh"
+printf '%s\n' "${KROCLAUDE_SSH_AUTHORIZED_KEY:-}" > "$CLAUDE_HOME/.ssh/authorized_keys"
+chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
+chown claude:claude "$CLAUDE_HOME/.ssh/authorized_keys"
+
 export DISPLAY=:99
 
 exec /init "$@"

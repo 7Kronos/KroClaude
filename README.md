@@ -34,6 +34,18 @@ Point a Coolify "Docker Compose" application at this repo. Set
 Coolify secrets. The compose file works as-is; the two named volumes are
 created on first boot and persist across redeploys.
 
+## Remote SSH access
+
+The image runs a hardened OpenSSH server on container port `2221`
+(default host port `2221`, overridable via
+`KROCLAUDE_SSH_HOST_PORT`). Authentication is **public-key only** —
+set `KROCLAUDE_SSH_AUTHORIZED_KEY` to the verbatim contents of your
+`authorized_keys` (one or more public keys, one per line) in `.env`
+or a Coolify secret, then `ssh -p 2221 claude@<host>`. Passwords,
+keyboard-interactive auth, and root login are disabled. See
+[`specs/003-ssh-access/quickstart.md`](specs/003-ssh-access/quickstart.md)
+for setup, key rotation, and troubleshooting.
+
 ## Bundled skills
 
 Claude Code skills committed under [`skills/`](skills/) at the repo root

@@ -35,6 +35,17 @@ services:
       # Optional notifications (Apprise URLs). Off unless the in-container
       # sentinel /home/claude/.claude/notify-on also exists.
       NOTIFY_URLS: "${NOTIFY_URLS:-}"
+      # Optional SSH access (feature 003-ssh-access). Verbatim contents
+      # of ~claude/.ssh/authorized_keys; one or more public keys, one
+      # per line. Empty = no login possible.
+      KROCLAUDE_SSH_AUTHORIZED_KEY: "${KROCLAUDE_SSH_AUTHORIZED_KEY:-}"
+      # In-container SSH port is fixed at 2221; this var configures the
+      # HOST-side port override only.
+      KROCLAUDE_SSH_HOST_PORT: "${KROCLAUDE_SSH_HOST_PORT:-2221}"
+
+    ports:
+      # Feature 003 — SSH access. Host port overridable via env.
+      - "${KROCLAUDE_SSH_HOST_PORT:-2221}:2221"
 
     volumes:
       - kroclaude-config:/home/claude/.claude
