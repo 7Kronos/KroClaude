@@ -24,6 +24,9 @@ cleanup() { $COMPOSE down >/dev/null 2>&1 || true; }
 
 trap cleanup EXIT
 
+# Pre-create the shared external kroclaude-apps network (idempotent).
+docker network create kroclaude-apps >/dev/null 2>&1 || true
+
 log "Building image and bringing stack up"
 $COMPOSE up -d --build
 

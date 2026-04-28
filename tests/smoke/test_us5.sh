@@ -44,7 +44,8 @@ cleanup() {
     COMPOSE_PROJECT_NAME=$NOSOCK_PROJECT \
         $COMPOSE -f docker-compose.yaml -f tests/smoke/no-socket.override.yaml \
         down --remove-orphans -v >/dev/null 2>&1 || true
-    docker network rm "$NET" >/dev/null 2>&1 || true
+    # kroclaude-apps is an operator-managed external network shared with
+    # downstream smokes (US6 etc.); leave it in place.
     rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT

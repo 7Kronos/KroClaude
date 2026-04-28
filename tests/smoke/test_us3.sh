@@ -17,6 +17,9 @@ log()  { printf '\n[us3] %s\n' "$*"; }
 fail() { printf '[us3] FAIL: %s\n' "$*" >&2; exit 1; }
 in_ctn() { docker exec "$SVC" bash -c "$1"; }
 
+# Pre-create the shared external kroclaude-apps network (idempotent).
+docker network create kroclaude-apps >/dev/null 2>&1 || true
+
 # Bring stack up if not already running.
 if ! docker inspect --format '{{.State.Health.Status}}' "$SVC" >/dev/null 2>&1; then
     log "Stack not running — bringing up"

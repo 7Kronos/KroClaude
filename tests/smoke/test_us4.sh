@@ -46,6 +46,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Pre-create the shared external kroclaude-apps network (idempotent).
+docker network create kroclaude-apps >/dev/null 2>&1 || true
+
 # Generate the first throwaway keypair that will be the initial authorized key.
 ssh-keygen -t ed25519 -N '' -f "$TMP_DIR/id_test1" -q
 

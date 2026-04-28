@@ -65,6 +65,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Pre-create the shared external kroclaude-apps network (idempotent).
+docker network create kroclaude-apps >/dev/null 2>&1 || true
+
 # Snapshot /config/ so the cleanup trap can restore it AFTER fixtures
 # get dropped in.
 log "Snapshotting /config/ to $CONFIG_BACKUP"

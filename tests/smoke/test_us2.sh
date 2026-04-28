@@ -50,6 +50,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Pre-create the shared external kroclaude-apps network (idempotent).
+docker network create kroclaude-apps >/dev/null 2>&1 || true
+
 # Place the bundled-skill fixture in source BEFORE any build, so every
 # `compose build` in this test bakes it into the image.
 mkdir -p "$FIXTURE_SRC"
