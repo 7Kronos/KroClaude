@@ -16,9 +16,10 @@ SVC=kroclaude
 export COMPOSE_PROJECT_NAME=kroclaude
 WS_VOL=kroclaude_kroclaude-workspace
 
-# Skill-bundling fixtures (feature 002).
+# Skill-bundling fixtures (feature 002, repathed under feature 005's
+# /config/skills/ bundle root).
 FIXTURE_NAME=__smoke_fixture_skill
-FIXTURE_SRC="skills/$FIXTURE_NAME"
+FIXTURE_SRC="config/skills/$FIXTURE_NAME"
 FIXTURE_BACKUP="/tmp/${FIXTURE_NAME}.bak"
 USER_SKILL_NAME=__smoke_user_skill
 FIXTURE_V1=$'# smoke-fixture-skill\nVERSION=1\n'
