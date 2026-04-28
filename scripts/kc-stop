@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# kc-stop — stop (and by default remove) a KroClaude-managed container.
+# Refuses to operate on containers without the kroclaude.managed=true label.
+# Contract: specs/004-docker-spawning/contracts/kc-helpers.md
+set -euo pipefail
+
+usage() {
+    echo "usage: kc-stop NAME [--keep]" >&2
+}
+
+# ---------- Preflight: docker reachable? ----------
+DOCKER=docker
+if ! docker info >/dev/null 2>&1; then
+    if sudo -n docker info >/dev/null 2>&1; then
+        DOCKER="sudo -n docker"
+    else
+        echo "kc-stop: docker.sock not available — mount /var/run/docker.sock to use this helper" >&2
+        exit 2
+    fi
+fi
+
+# ---------- Argv parse ----------
+KEEP=0
+NAME=""
+for arg in "$@"; do
+    case "$arg" in
+        --keep) KEEP=1 ;;
+        -h|--help) usage; exit 0 ;;
+        --*) echo "kc-stop: unknown flag '$arg'" >&2; exit 3 ;;
+        *)
+            if [ -n "$NAME" ]; then
+                echo "kc-stop: only one container name accepted" >&2
+                exit 3
+            fi
+            NAME=$arg
+            ;;
+    esac
+done
+
+if [ -z "$NAME" ]; then
+    usage
+    exit 3
+fi
+
+# ---------- Idempotent on already-removed targets ----------
+if ! $DOCKER inspect "$NAME" >/dev/null 2>&1; then
+    echo "kc-stop: $NAME already removed"
+    exit 0
+fi
+
+# ---------- Refuse if not KroClaude-managed ----------
+managed=$($DOCKER inspect --format '{{ index .Config.Labels "kroclaude.managed" }}' "$NAME" 2>/dev/null || echo "")
+if [ "$managed" != "true" ]; then
+    echo "kc-stop: $NAME is not a KroClaude-managed container; refusing" >&2
+    exit 3
+fi
+
+# ---------- Stop, then (unless --keep) remove ----------
+$DOCKER stop "$NAME" >/dev/null || true
+
+if [ "$KEEP" -ne 1 ]; then
+    # `docker rm` may fail if the container was started with --rm and
+    # has already auto-removed itself in the time between `stop` and
+    # `rm`. Tolerate that case.
+    $DOCKER rm "$NAME" >/dev/null 2>&1 || true
+fi
+
+echo "kc-stop: $NAME stopped$( [ "$KEEP" -eq 1 ] || echo ' and removed')"
+exit 0

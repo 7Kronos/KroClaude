@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# kc-forward — print the SSH local-port-forward command that tunnels
+# from the user's laptop into a sibling container's app port via the
+# KroClaude SSH server (port 2221 by default).
+# Contract: specs/004-docker-spawning/contracts/kc-helpers.md
+set -euo pipefail
+
+usage() {
+    echo "usage: kc-forward CONTAINER PORT [LOCAL_PORT] [--host HOST]" >&2
+}
+
+# ---------- Preflight: docker reachable? ----------
+if ! docker info >/dev/null 2>&1 && ! sudo -n docker info >/dev/null 2>&1; then
+    echo "kc-forward: docker.sock not available — mount /var/run/docker.sock to use this helper" >&2
+    exit 2
+fi
+
+# ---------- Argv parse ----------
+CONTAINER=""
+PORT=""
+LOCAL_PORT=""
+HOST_OVERRIDE=""
+
+POS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --host)
+            shift
+            [ $# -gt 0 ] || { echo "kc-forward: --host requires a value" >&2; exit 3; }
+            HOST_OVERRIDE=$1
+            ;;
+        --host=*)
+            HOST_OVERRIDE=${1#*=}
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --*)
+            echo "kc-forward: unknown flag '$1'" >&2
+            usage
+            exit 3
+            ;;
+        *)
+            POS+=("$1")
+            ;;
+    esac
+    shift
+done
+
+if [ ${#POS[@]} -lt 2 ] || [ ${#POS[@]} -gt 3 ]; then
+    usage
+    exit 3
+fi
+CONTAINER=${POS[0]}
+PORT=${POS[1]}
+LOCAL_PORT=${POS[2]:-$PORT}
+
+# ---------- Resolve the target on the in-container DNS resolver ----------
+if ! getent hosts "$CONTAINER" >/dev/null; then
+    echo "kc-forward: cannot resolve container '$CONTAINER' on kroclaude-apps; is it spawned via kc-run?" >&2
+    exit 3
+fi
+
+# ---------- Resolve host + port for the printed `ssh` line ----------
+SSH_PORT=${KROCLAUDE_SSH_HOST_PORT:-2221}
+
+if [ -n "$HOST_OVERRIDE" ]; then
+    HOST=$HOST_OVERRIDE
+elif [ -n "${KROCLAUDE_PUBLIC_HOST:-}" ]; then
+    HOST=$KROCLAUDE_PUBLIC_HOST
+else
+    echo "[kc-forward] KROCLAUDE_PUBLIC_HOST is unset; substitute <host> with your deployment URL or set the env var" >&2
+    HOST="<host>"
+fi
+
+# ---------- Print the ssh command ----------
+printf 'ssh -N -L %s:%s:%s -p %s claude@%s\n' \
+    "$LOCAL_PORT" "$CONTAINER" "$PORT" "$SSH_PORT" "$HOST"

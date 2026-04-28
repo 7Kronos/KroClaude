@@ -62,6 +62,10 @@ public-key only; the operator configures authorized keys via the
 `KROCLAUDE_SSH_AUTHORIZED_KEY` environment variable. Password auth,
 keyboard-interactive auth, and root login are disabled.
 
+## Spawning containers
+
+Use `kc-run` / `kc-ps` / `kc-stop` / `kc-forward` instead of raw `docker run` / `docker ps` / `docker stop` and ad-hoc `ssh -L` plumbing — they wrap docker with KroClaude defaults (shared network, labels, dangerous-flag blocks, paste-ready forward command).
+
 ## Out of scope — do not propose
 
 - A web UI or any inbound port other than `2221/tcp` (SSH). The image

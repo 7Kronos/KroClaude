@@ -62,6 +62,21 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     apt-get update && apt-get install -y --no-install-recommends gh && \
     rm -rf /var/lib/apt/lists/*
 
+# ---------- Docker CLI (feature 004-docker-spawning) ----------
+# Client only — NO daemon (docker-ce / containerd.io are intentionally
+# omitted). The host's daemon is reached via the bind-mounted socket
+# at /var/run/docker.sock; see specs/004-docker-spawning/research.md §R1.
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg \
+      -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/debian trixie stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
+      docker-ce-cli docker-buildx-plugin docker-compose-plugin && \
+    rm -rf /var/lib/apt/lists/*
+
 # ---------- bat / fd symlinks (Debian names them batcat / fdfind) + locale ----------
 RUN ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null || true && \
     ln -sf /usr/bin/fdfind /usr/local/bin/fd 2>/dev/null || true && \
@@ -129,6 +144,10 @@ RUN chmod +x /etc/s6-overlay/s6-rc.d/sshd/run && \
 # ---------- Helper scripts and default configs ----------
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/notify.py     /usr/local/bin/notify.py
+COPY scripts/kc-run        /usr/local/bin/kc-run
+COPY scripts/kc-ps         /usr/local/bin/kc-ps
+COPY scripts/kc-stop       /usr/local/bin/kc-stop
+COPY scripts/kc-forward    /usr/local/bin/kc-forward
 COPY config/settings.json  /usr/local/share/kroclaude/settings.json
 COPY config/CLAUDE.md      /usr/local/share/kroclaude/CLAUDE.md
 
@@ -138,7 +157,9 @@ COPY config/CLAUDE.md      /usr/local/share/kroclaude/CLAUDE.md
 # (FR-002), without touching user-installed skills (FR-003).
 COPY skills/ /usr/local/share/kroclaude/skills/
 
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py && \
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py \
+             /usr/local/bin/kc-run /usr/local/bin/kc-ps \
+             /usr/local/bin/kc-stop /usr/local/bin/kc-forward && \
     install -d -o claude -g claude /home/claude/.claude
 
 # ---------- Bash history persistence (research R9) ----------

@@ -42,6 +42,10 @@ services:
       # In-container SSH port is fixed at 2221; this var configures the
       # HOST-side port override only.
       KROCLAUDE_SSH_HOST_PORT: "${KROCLAUDE_SSH_HOST_PORT:-2221}"
+      # Feature 004 — public hostname used by `kc-forward` to print a
+      # ready-to-paste `ssh -L` command. When unset, kc-forward emits
+      # the literal placeholder `<host>` and a one-line warning.
+      KROCLAUDE_PUBLIC_HOST: "${KROCLAUDE_PUBLIC_HOST:-}"
 
     ports:
       # Feature 003 — SSH access. Host port overridable via env.
@@ -50,7 +54,26 @@ services:
     volumes:
       - kroclaude-config:/home/claude/.claude
       - kroclaude-workspace:/workspace
+      # Feature 004 — Docker-out-of-Docker. Bind-mounting the host
+      # socket grants effective host-root to anyone who can write to
+      # it; SSH is key-only / claude-only as the access mitigation.
+      # See specs/004-docker-spawning/spec.md FR-014.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    networks:
+      - default
+      - kroclaude-apps
 
 volumes:
   kroclaude-config:
   kroclaude-workspace:
+
+networks:
+  # Feature 004 — shared user-defined bridge network for KroClaude
+  # and every container spawned via `kc-run`. Declared external so
+  # `docker compose down -v` does NOT delete it and orphan siblings.
+  # Operator prerequisite (one-time):
+  #   docker network create kroclaude-apps
+  kroclaude-apps:
+    name: kroclaude-apps
+    external: true

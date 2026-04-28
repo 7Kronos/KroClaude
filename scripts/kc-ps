@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# kc-ps — list ONLY KroClaude-managed containers.
+# Contract: specs/004-docker-spawning/contracts/kc-helpers.md
+set -euo pipefail
+
+# ---------- Preflight: docker reachable? ----------
+DOCKER=docker
+if ! docker info >/dev/null 2>&1; then
+    if sudo -n docker info >/dev/null 2>&1; then
+        DOCKER="sudo -n docker"
+    else
+        echo "kc-ps: docker.sock not available — mount /var/run/docker.sock to use this helper" >&2
+        exit 2
+    fi
+fi
+
+# ---------- Argv parse ----------
+SHOW_ALL=0
+for arg in "$@"; do
+    case "$arg" in
+        -a|--all)
+            SHOW_ALL=1
+            ;;
+        *)
+            echo "kc-ps: unknown flag '$arg' (only -a / --all is accepted)" >&2
+            exit 3
+            ;;
+    esac
+done
+
+EXTRA=()
+[ "$SHOW_ALL" -eq 1 ] && EXTRA+=("-a")
+
+# shellcheck disable=SC2086
+$DOCKER ps "${EXTRA[@]}" \
+    --filter label=kroclaude.managed=true \
+    --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'

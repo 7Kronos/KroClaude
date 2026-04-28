@@ -1,0 +1,35 @@
+# tests/smoke/no-socket.override.yaml — feature 004-docker-spawning US4.
+# Overrides the main compose file to omit the /var/run/docker.sock
+# bind-mount, so we can prove the entrypoint and helpers degrade
+# gracefully when the host Docker socket is not available.
+#
+# Used by tests/smoke/test_us5.sh under a separate compose project
+# (kroclaude-nosock) to avoid colliding with the main stack.
+#
+# !override and !reset are Docker Compose v2 tags that force full
+# replacement of the parent's list/map (compose's default is to MERGE
+# lists like volumes/ports/networks). YAML editors that don't ship
+# the compose schema will flag these as unresolved tags — that's a
+# false positive; `docker compose config` validates them cleanly.
+
+services:
+  kroclaude:
+    container_name: kroclaude-nosock
+    hostname: kroclaude-nosock
+    # Omit the host SSH port publish so it doesn't fight the main
+    # stack's 2221 binding when both stacks are up at once.
+    ports: !reset []
+    # Override volumes WITHOUT the docker.sock bind-mount. !reset
+    # forces full replacement instead of compose's default list-merge.
+    volumes: !override
+      - kroclaude-nosock-config:/home/claude/.claude
+      - kroclaude-nosock-workspace:/workspace
+    # The main stack attaches to kroclaude-apps. The degraded stack
+    # has no business there — we want to exercise the "no socket"
+    # path, not the network-attach path.
+    networks: !reset
+      - default
+
+volumes:
+  kroclaude-nosock-config:
+  kroclaude-nosock-workspace:

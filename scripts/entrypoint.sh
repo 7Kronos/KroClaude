@@ -106,6 +106,26 @@ if [ -d "$SKILLS_SRC" ] && [ -n "$(ls -A "$SKILLS_SRC" 2>/dev/null)" ]; then
     done
 fi
 
+# ---------- Docker socket group bootstrap (feature 004-docker-spawning) ----------
+# Detect the GID of the bind-mounted /var/run/docker.sock and add `claude`
+# to a matching group BEFORE sshd starts. usermod -aG only takes effect
+# for FUTURE logins, so this MUST run before s6 brings sshd up.
+# Contract: specs/004-docker-spawning/contracts/socket-group.md
+DOCKER_SOCK=/var/run/docker.sock
+if [ -S "$DOCKER_SOCK" ]; then
+    SOCK_GID=$(stat -c '%g' "$DOCKER_SOCK")
+    if ! getent group "$SOCK_GID" >/dev/null; then
+        groupadd -g "$SOCK_GID" docker_host || true
+    fi
+    GRP_NAME=$(getent group "$SOCK_GID" | cut -d: -f1)
+    if ! id -nG claude | tr ' ' '\n' | grep -qx "$GRP_NAME"; then
+        usermod -aG "$GRP_NAME" claude
+        echo "[entrypoint] claude added to group $GRP_NAME (gid $SOCK_GID) for docker.sock"
+    fi
+else
+    echo "[entrypoint] docker.sock not mounted — kc-* helpers will warn at runtime" >&2
+fi
+
 # ---------- SSH host keys + authorized_keys seeding (feature 003-ssh-access) ----------
 # Host keys are generated ONCE (FR-009 fingerprint stability) inside the
 # kroclaude-config volume so they survive container recreation.
