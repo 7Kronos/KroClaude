@@ -16,9 +16,18 @@ SVC=kroclaude
 export COMPOSE_PROJECT_NAME=kroclaude
 WS_VOL=kroclaude_kroclaude-workspace
 
+# Skill-bundling fixtures (feature 002).
+FIXTURE_NAME=__smoke_fixture_skill
+FIXTURE_SRC="skills/$FIXTURE_NAME"
+FIXTURE_BACKUP="/tmp/${FIXTURE_NAME}.bak"
+USER_SKILL_NAME=__smoke_user_skill
+FIXTURE_V1=$'# smoke-fixture-skill\nVERSION=1\n'
+FIXTURE_V2=$'# smoke-fixture-skill\nVERSION=2\n'
+
 log()  { printf '\n[us2] %s\n' "$*"; }
 fail() { printf '[us2] FAIL: %s\n' "$*" >&2; $COMPOSE logs --no-color $SVC || true; exit 1; }
-in_ctn() { docker exec "$SVC" bash -c "$1"; }
+in_ctn()    { docker exec "$SVC" bash -c "$1"; }
+as_claude() { docker exec --user claude "$SVC" bash -c "$1"; }
 
 wait_healthy() {
     for i in $(seq 1 60); do
@@ -29,8 +38,23 @@ wait_healthy() {
     fail "container did not reach healthy in 60s"
 }
 
-cleanup() { $COMPOSE down --remove-orphans -v >/dev/null 2>&1 || true; }
+cleanup() {
+    $COMPOSE down --remove-orphans -v >/dev/null 2>&1 || true
+    # Restore the fixture skill if the orphan scenario moved it aside.
+    if [ -d "$FIXTURE_BACKUP" ]; then
+        rm -rf "$FIXTURE_SRC"
+        mv "$FIXTURE_BACKUP" "$FIXTURE_SRC" 2>/dev/null || true
+    fi
+    # Wipe the fixture from the working tree so the source repo stays clean.
+    rm -rf "$FIXTURE_SRC"
+}
 trap cleanup EXIT
+
+# Place the bundled-skill fixture in source BEFORE any build, so every
+# `compose build` in this test (including Scenario 3's --no-cache run)
+# bakes it into the image.
+mkdir -p "$FIXTURE_SRC"
+printf '%s' "$FIXTURE_V1" > "$FIXTURE_SRC/SKILL.md"
 
 # ---------- Scenario 1: empty-volume first boot ----------
 log "Scenario 1 — empty-volume first boot"
@@ -75,5 +99,78 @@ $COMPOSE up -d --force-recreate
 wait_healthy
 in_ctn 'test ! -f /workspace/.us2-workspace-token' || fail "workspace token survived volume wipe (it should not)"
 in_ctn 'grep -q persist-cred /home/claude/.claude/.us2-config-token' || fail "config token lost during workspace wipe"
+
+# ============================================================================
+# Skill-bundling scenarios (feature 002-skill-bundling).
+# Run after the persistence scenarios so the fixture skill — present in
+# `skills/` since the top of this test — has been baked into every image
+# build along the way.
+# ============================================================================
+
+# ---------- Scenario 5: bundled skill present + byte-identical (US1) ----------
+log "Scenario 5 (US1) — bundled skill reflected into volume on first boot"
+$COMPOSE down --remove-orphans -v >/dev/null 2>&1 || true
+$COMPOSE up -d --force-recreate
+wait_healthy
+
+as_claude "test -f /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md" \
+    || fail "bundled fixture skill not reflected into volume"
+
+actual=$(as_claude "cat /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
+expected=$(cat "$FIXTURE_SRC/SKILL.md")
+[ "$actual" = "$expected" ] \
+    || fail "bundled fixture content drift between source and in-volume copy"
+
+# Ownership check (FR-008).
+owner=$(in_ctn "stat -c '%U:%G' /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
+[ "$owner" = "claude:claude" ] \
+    || fail "fixture skill ownership is '$owner', expected 'claude:claude'"
+
+# ---------- Scenario 6: user-installed skill preserved across down/up (US2) ----------
+log "Scenario 6 (US2) — user-installed skill survives recreate"
+as_claude "mkdir -p /home/claude/.claude/skills/$USER_SKILL_NAME && echo USER-CONTENT-v1 > /home/claude/.claude/skills/$USER_SKILL_NAME/SKILL.md"
+$COMPOSE down --remove-orphans
+$COMPOSE up -d --force-recreate
+wait_healthy
+user_now=$(as_claude "cat /home/claude/.claude/skills/$USER_SKILL_NAME/SKILL.md")
+[ "$user_now" = "USER-CONTENT-v1" ] \
+    || fail "user skill content changed across recreate (got: $user_now)"
+
+# ---------- Scenario 7: collision — bundled wins (US2) ----------
+log "Scenario 7 (US2) — name collision: bundled wins over user override"
+as_claude "echo USER-OVERRIDE > /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md"
+$COMPOSE restart >/dev/null
+wait_healthy
+fixture_after=$(as_claude "cat /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
+[ "$fixture_after" = "$(cat "$FIXTURE_SRC/SKILL.md")" ] \
+    || fail "bundled skill did not overwrite user-override content"
+
+# ---------- Scenario 8: orphaned bundled skill is preserved (US2) ----------
+log "Scenario 8 (US2) — bundled skill removed from source: in-volume copy preserved"
+captured=$(as_claude "cat /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
+mv "$FIXTURE_SRC" "$FIXTURE_BACKUP"
+$COMPOSE down --remove-orphans
+$COMPOSE build --no-cache >/dev/null
+$COMPOSE up -d --force-recreate
+wait_healthy
+orphan_now=$(as_claude "cat /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
+[ "$orphan_now" = "$captured" ] \
+    || fail "orphaned bundled skill was modified after rebuild"
+# Restore fixture for the next scenario.
+mv "$FIXTURE_BACKUP" "$FIXTURE_SRC"
+
+# ---------- Scenario 9: bundled update propagates, user skill intact (US3) ----------
+log "Scenario 9 (US3) — bundled update propagates, user skill untouched"
+printf '%s' "$FIXTURE_V2" > "$FIXTURE_SRC/SKILL.md"
+$COMPOSE down --remove-orphans
+$COMPOSE build --no-cache >/dev/null
+$COMPOSE up -d --force-recreate
+wait_healthy
+new_fixture=$(as_claude "cat /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
+[ "$new_fixture" = "$FIXTURE_V2" ] \
+    || fail "bundled skill update did not propagate (got: $new_fixture)"
+user_after=$(as_claude "cat /home/claude/.claude/skills/$USER_SKILL_NAME/SKILL.md")
+[ "$user_after" = "USER-CONTENT-v1" ] \
+    || fail "user skill modified during bundled update (got: $user_after)"
 
 log "PASS"

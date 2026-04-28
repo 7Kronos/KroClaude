@@ -45,3 +45,20 @@
     in place; manual cleanup is the user's responsibility.
 - Spec is ready for `/speckit-plan`. No `/speckit-clarify` round
   required.
+
+## Implementation re-validation
+
+Re-checked all 16 items against the as-implemented state on the
+`002-skill-bundling` branch. All still pass. The implementation
+introduced no new ambiguities and made no requirement testable that
+wasn't already testable by an FR. Specifically:
+
+- The Dockerfile `COPY skills/ /usr/local/share/kroclaude/skills/`
+  layer satisfies FR-001.
+- The reflection stanza in `scripts/entrypoint.sh` satisfies FR-002,
+  FR-003, FR-004, FR-006, FR-008, FR-009, FR-010.
+- `tests/smoke/test_us2.sh` Scenarios 5–9 cover SC-001, SC-002, SC-003,
+  and exercise FR-007.
+- The CI `bundled-skills-budget` job enforces FR-005 / SC-005's
+  long-tail "no deletions" expectation by capping the bundled set
+  size and count.

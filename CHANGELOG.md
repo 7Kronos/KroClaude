@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Image tag versions are independent of the project constitution version.
 
+## [Unreleased]
+
+### Added
+
+- **Bundled skills**: image now ships Claude Code skills under
+  `skills/` at the repo root and reflects them into the persistent
+  `~/.claude/skills/` directory on every container start. User-installed
+  skills (any directory under `~/.claude/skills/` whose name is not in
+  the bundled set) are never read, modified, or deleted by the start
+  sequence. See
+  [`specs/002-skill-bundling/`](specs/002-skill-bundling/) for spec,
+  plan, and contracts.
+  - The bundled skill set is part of the image's semver:
+    **PATCH** for content fixes inside an existing bundled skill,
+    **MINOR** for adding a bundled skill, **MAJOR** for removing,
+    renaming, or contract-breaking changes (per
+    [`specs/002-skill-bundling/research.md`](specs/002-skill-bundling/research.md) §R6).
+  - Collision rule (user-installed skill with the same name as a
+    bundled one): the bundled version wins on the next start.
+  - Smoke verification: extends `tests/smoke/test_us2.sh` with five
+    new scenarios covering reflection, user-skill preservation,
+    collision, orphan preservation, and update propagation.
+
 ## [1.0.0] — Unreleased (target)
 
 ### Added

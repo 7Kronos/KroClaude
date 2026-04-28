@@ -16,6 +16,12 @@ LICENSE
 # Tests (run against the built image, not baked into it)
 tests/
 
+# NOTE: skills/ is intentionally part of the build context — the
+# Dockerfile COPYs it into /usr/local/share/kroclaude/skills/ and the
+# entrypoint reflects bundled skills into the persistent volume on
+# every container start (feature 002-skill-bundling). Do not add a
+# pattern that excludes skills/ here.
+
 # Editor & OS
 .vscode/
 .idea/

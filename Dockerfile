@@ -117,6 +117,13 @@ COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/notify.py     /usr/local/bin/notify.py
 COPY config/settings.json  /usr/local/share/kroclaude/settings.json
 COPY config/CLAUDE.md      /usr/local/share/kroclaude/CLAUDE.md
+
+# ---------- Bundled Claude Code skills (feature 002-skill-bundling) ----------
+# Read-only image-time copy. The entrypoint reflects each immediate
+# subdirectory into /home/claude/.claude/skills/<name>/ on every boot
+# (FR-002), without touching user-installed skills (FR-003).
+COPY skills/ /usr/local/share/kroclaude/skills/
+
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py && \
     install -d -o claude -g claude /home/claude/.claude
 

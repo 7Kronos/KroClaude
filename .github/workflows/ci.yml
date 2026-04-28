@@ -85,6 +85,29 @@ jobs:
       # baseline, this step compares and fails on >10% drift. Until then,
       # the job just records the size.
 
+  bundled-skills-budget:
+    name: Bundled skills budget (≤20 skills, ≤10 MB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Count and size bundled skills
+        run: |
+          if [ ! -d skills ]; then
+            echo "no skills/ directory — nothing to enforce"
+            exit 0
+          fi
+          count=$(find skills -mindepth 1 -maxdepth 1 -type d | wc -l)
+          size=$(du -sb skills/ | awk '{print $1}')
+          echo "Bundled skills: $count directories, $size bytes"
+          if [ "$count" -gt 20 ]; then
+            echo "::error::bundled skills count $count exceeds budget of 20 (FR-005)"
+            exit 1
+          fi
+          if [ "$size" -gt 10485760 ]; then
+            echo "::error::bundled skills total size $size bytes exceeds 10 MB budget (FR-005)"
+            exit 1
+          fi
+
   secrets-in-history:
     name: No credentials in image layers (SC-005)
     runs-on: ubuntu-latest

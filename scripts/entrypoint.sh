@@ -87,6 +87,25 @@ JSON
     echo "[entrypoint] First-boot seed complete."
 fi
 
+# ---------- Bundled skill reflection (feature 002-skill-bundling) ----------
+# Mirrors /usr/local/share/kroclaude/skills/<name>/ into
+# /home/claude/.claude/skills/<name>/ on EVERY boot (NOT gated by the
+# sentinel — FR-002). User-installed skills (different names) are never
+# enumerated or touched (FR-003). No-op when the source is missing or
+# empty (FR-004).
+SKILLS_SRC=/usr/local/share/kroclaude/skills
+SKILLS_DEST="$CONFIG_DIR/skills"
+if [ -d "$SKILLS_SRC" ] && [ -n "$(ls -A "$SKILLS_SRC" 2>/dev/null)" ]; then
+    install -d -o claude -g claude "$SKILLS_DEST"
+    for skill_src in "$SKILLS_SRC"/*/; do
+        [ -d "$skill_src" ] || continue
+        skill_name=$(basename "$skill_src")
+        rm -rf "$SKILLS_DEST/$skill_name"
+        cp -r "$skill_src" "$SKILLS_DEST/$skill_name"
+        chown -R claude:claude "$SKILLS_DEST/$skill_name"
+    done
+fi
+
 export DISPLAY=:99
 
 exec /init "$@"

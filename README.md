@@ -34,6 +34,17 @@ Point a Coolify "Docker Compose" application at this repo. Set
 Coolify secrets. The compose file works as-is; the two named volumes are
 created on first boot and persist across redeploys.
 
+## Bundled skills
+
+Claude Code skills committed under [`skills/`](skills/) at the repo root
+are baked into the image at build time and reflected into the
+persistent `~/.claude/skills/` directory on every container start. Any
+skill you install in the running container under that directory whose
+name is not in the bundled set is preserved verbatim across restarts,
+image rebuilds, and pulls of new image versions. See
+[`specs/002-skill-bundling/quickstart.md`](specs/002-skill-bundling/quickstart.md)
+for how to add a bundled skill, install a user skill, or reset state.
+
 ## Credits
 
 Inspired by [HolyClaude](https://github.com/CoderLuii/HolyClaude). See
