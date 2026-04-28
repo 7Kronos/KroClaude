@@ -82,6 +82,11 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 USER root
 ENV PATH="/home/claude/.local/bin:${PATH}"
 
+# /etc/environment is read by pam_env (UsePAM yes in sshd_config) so SSH
+# sessions inherit the same PATH that ENV PATH gives the entrypoint.
+RUN printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n' \
+      > /etc/environment
+
 # ---------- npm global packages (FR-003, FR-003a) ----------
 RUN npm i -g \
     typescript tsx \
@@ -140,6 +145,14 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py && \
 RUN printf '\nexport HISTFILE=/home/claude/.claude/.bash_history\nexport HISTSIZE=10000\nexport HISTFILESIZE=20000\n' \
     >> /home/claude/.bashrc && \
     chown claude:claude /home/claude/.bashrc
+
+# ---------- Land interactive logins in /workspace (feature 003) ----------
+# /etc/profile sources /etc/profile.d/*.sh for login shells (interactive
+# SSH login, `bash -l`). Non-interactive `ssh user@host cmd` invocations
+# stay in the user's HOME per standard SSH convention.
+RUN printf 'if [ -d /workspace ] && [ "$PWD" = "$HOME" ]; then cd /workspace; fi\n' \
+      > /etc/profile.d/kroclaude.sh && \
+    chmod 0644 /etc/profile.d/kroclaude.sh
 
 # ---------- Working directory ----------
 WORKDIR /workspace

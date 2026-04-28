@@ -55,7 +55,7 @@ ssh-keygen -t ed25519 -N '' -f "$TMP_DIR/id_test1" -q
 
 log "Scenario US1 — bring stack up with key in env, ssh in, run claude"
 KROCLAUDE_SSH_AUTHORIZED_KEY="$(cat "$TMP_DIR/id_test1.pub")" \
-    $COMPOSE up -d --force-recreate
+    $COMPOSE up -d --build --force-recreate
 wait_healthy
 
 # Positive auth: claude --version
@@ -64,10 +64,14 @@ ssh_test "$TMP_DIR/id_test1" 2221 'claude --version' >"$TMP_DIR/us4_claude_versi
 grep -qE 'Claude Code|^[0-9]+\.[0-9]+\.[0-9]+' "$TMP_DIR/us4_claude_version" \
     || fail "claude version output unexpected: $(cat "$TMP_DIR/us4_claude_version")"
 
-# Working directory is /workspace per data-model.
-pwd_out=$(ssh_test "$TMP_DIR/id_test1" 2221 'pwd')
+# Interactive-login working directory is /workspace via /etc/profile.d
+# (data-model "Working dir on login"). bash -lc forces the login-shell
+# path so /etc/profile + profile.d/kroclaude.sh runs. Non-interactive
+# `ssh host cmd` lands in $HOME per standard convention; that's
+# expected, not asserted here.
+pwd_out=$(ssh_test "$TMP_DIR/id_test1" 2221 'bash -lc pwd')
 [ "$pwd_out" = "/workspace" ] \
-    || fail "ssh login working dir is '$pwd_out', expected '/workspace'"
+    || fail "ssh login-shell working dir is '$pwd_out', expected '/workspace'"
 
 # User is claude per FR-005.
 user_out=$(ssh_test "$TMP_DIR/id_test1" 2221 'id -un')
@@ -82,7 +86,7 @@ user_out=$(ssh_test "$TMP_DIR/id_test1" 2221 'id -un')
 log "Scenario US2 — rotate key in env, old key MUST fail, new key MUST work"
 ssh-keygen -t ed25519 -N '' -f "$TMP_DIR/id_test2" -q
 KROCLAUDE_SSH_AUTHORIZED_KEY="$(cat "$TMP_DIR/id_test2.pub")" \
-    $COMPOSE up -d --force-recreate
+    $COMPOSE up -d --build --force-recreate
 wait_healthy
 ssh_test "$TMP_DIR/id_test2" 2221 'true' \
     || fail "rotated key (id_test2) was rejected"
@@ -93,7 +97,7 @@ fi
 # Multi-key — both keys in env, both work.
 log "Scenario US2 — multi-key: both authorized keys MUST work"
 KROCLAUDE_SSH_AUTHORIZED_KEY="$(cat "$TMP_DIR/id_test1.pub")"$'\n'"$(cat "$TMP_DIR/id_test2.pub")" \
-    $COMPOSE up -d --force-recreate
+    $COMPOSE up -d --build --force-recreate
 wait_healthy
 ssh_test "$TMP_DIR/id_test1" 2221 'true' \
     || fail "multi-key: id_test1 rejected"

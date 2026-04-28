@@ -1,2 +1,6 @@
 #!/bin/sh
+# /run is a fresh tmpfs at every container start — recreate the
+# privilege separation directory sshd expects (Debian's init script
+# does this for us; we don't run that, so we do it here).
+mkdir -p /run/sshd
 exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config_kroclaude
