@@ -20,6 +20,9 @@ its contents as facts and operating rules.
 - Shell core: `git`, `gh`, `curl`, `wget`, `jq`, `rg`, `fd`, `tree`,
   `tmux`, `fzf`, `bat`, `htop`, `strace`, `lsof`, `ss`.
 - Build & languages: Node 24, Python 3, `build-essential`, `pkg-config`.
+- Python tooling: `pip`, `uv`, `pipx` (use `uv tool install ...` or
+  `pipx install ...` to drop CLI tools into PATH without polluting
+  the system site-packages).
 - npm globals: `typescript`, `tsx`, `pnpm`, `vite`, `esbuild`, `eslint`,
   `prettier`, `serve`, `nodemon`, `concurrently`, `dotenv-cli`,
   `lighthouse`.

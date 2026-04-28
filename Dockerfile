@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Shell core
     git curl wget jq ripgrep fd-find unzip zip tree tmux fzf bat sudo bubblewrap \
     # Build & language toolchain (Node provided by base image)
-    build-essential pkg-config python3 python3-pip python3-venv \
+    build-essential pkg-config python3 python3-pip python3-venv pipx \
     # Browser automation stack (FR-003b)
     chromium xvfb \
     fonts-liberation2 fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji \
@@ -113,6 +113,14 @@ RUN npm i -g \
     lighthouse \
     @google/gemini-cli \
     @openai/codex
+
+# ---------- uv (Astral standalone installer — self-contained binary) ----------
+# Installed as the recommended path per Astral's docs (avoids polluting
+# the system site-packages). Always installs the latest release at build
+# time. `pipx` is provided alongside via apt for users who prefer it.
+# `/tt-install-speckit` assumes `uv` is on PATH.
+RUN curl -LsSf https://astral.sh/uv/install.sh \
+    | UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
 
 # ---------- Python packages (FR-003) ----------
 RUN pip install --no-cache-dir --break-system-packages \
