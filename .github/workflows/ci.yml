@@ -16,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Validate compose with default env
         run: docker compose --env-file /dev/null config
@@ -46,7 +46,7 @@ jobs:
           docker ps -a > docker-ps.log || true
       - name: Upload failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-logs-${{ github.run_id }}
           path: |
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-smoke
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build image
         run: docker build -t kroclaude:ci .
       - name: Measure compressed size
@@ -75,7 +75,7 @@ jobs:
     name: Bundled skills budget (≤20 skills, ≤10 MB)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Count and size bundled skills
         run: |
           if [ ! -d skills ]; then
@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-smoke
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build image
         run: docker build -t kroclaude:ci .
       - name: Grep docker history for credential-shaped values
@@ -117,17 +117,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-smoke, secrets-in-history]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
       - name: Login to registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ vars.REGISTRY || 'ghcr.io' }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push (amd64 + arm64)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
