@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[us6 fixture] lint hook fired' >&2"
+          }
+        ]
+      }
+    ]
+  }
+}

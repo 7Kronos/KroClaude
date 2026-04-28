@@ -41,6 +41,9 @@ jobs:
       - name: Smoke — US5 (Docker container spawning)
         run: bash tests/smoke/test_us5.sh
 
+      - name: Smoke — US6 (Config bundling — seven customization types)
+        run: bash tests/smoke/test_us6.sh
+
       # Budget + history checks reuse the kroclaude:dev image already built
       # by the smokes — no rebuild.
       - name: Image size budget (≤10% drift)

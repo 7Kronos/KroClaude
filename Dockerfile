@@ -148,14 +148,13 @@ COPY scripts/kc-run        /usr/local/bin/kc-run
 COPY scripts/kc-ps         /usr/local/bin/kc-ps
 COPY scripts/kc-stop       /usr/local/bin/kc-stop
 COPY scripts/kc-forward    /usr/local/bin/kc-forward
-COPY config/settings.json  /usr/local/share/kroclaude/settings.json
-COPY config/CLAUDE.md      /usr/local/share/kroclaude/CLAUDE.md
-
-# ---------- Bundled Claude Code skills (feature 002-skill-bundling) ----------
-# Read-only image-time copy. The entrypoint reflects each immediate
-# subdirectory into /home/claude/.claude/skills/<name>/ on every boot
-# (FR-002), without touching user-installed skills (FR-003).
-COPY skills/ /usr/local/share/kroclaude/skills/
+# ---------- Bundled Claude Code customization (feature 005-config-bundling) ----------
+# Single read-only image-time copy of the entire /config/ tree, replacing
+# the granular per-file COPYs and the legacy /skills/ COPY. The entrypoint
+# reflects each per-type subdirectory into ~/.claude/<type>/ on every boot
+# (settings.json + CLAUDE.md remain sentinel-gated first-boot-only seeds —
+# feature 001 contract preserved). See specs/005-config-bundling/.
+COPY config/ /usr/local/share/kroclaude/config/
 
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py \
              /usr/local/bin/kc-run /usr/local/bin/kc-ps \

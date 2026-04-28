@@ -5,60 +5,136 @@
 
 A reproducible Claude Code shell environment, packaged as a Dockerfile and
 docker-compose stack and deployable on Coolify. Non-root by default,
-shell-only (no inbound ports), with persistent named volumes for config and
-workspace state.
+SSH-accessible, with persistent named volumes for config and workspace state.
 
 ## Quickstart
 
 ```bash
-cp .env.example .env          # set ANTHROPIC_API_KEY
+cp .env.example .env          # set ANTHROPIC_API_KEY (and your SSH pubkey)
+docker network create kroclaude-apps   # one-time, see "Spawning containers" below
 docker compose build
 docker compose up -d
-docker exec -it kroclaude bash   # drops you in as the `claude` user
+docker exec -it -u claude kroclaude bash      # local shell
+ssh -p 2221 claude@<host>                     # remote shell (after pubkey is set)
 ```
 
 Inside the container, `claude`, `codex`, and `gemini` are on `PATH`.
 
 ## Configuration
 
-- Environment variables: copy [.env.example](.env.example) to `.env` and
-  fill it in. `ANTHROPIC_API_KEY` is required; `TZ`, `GIT_USER_NAME`,
-  `GIT_USER_EMAIL`, `NODE_OPTIONS`, and `NOTIFY_URLS` are optional.
-- Persistent volumes (declared in [docker-compose.yaml](docker-compose.yaml)):
-  - `kroclaude-config` → `/home/claude/.claude` (CLI config, history, auth)
-  - `kroclaude-workspace` → `/workspace` (your code)
-- Healthcheck and s6-overlay supervision are baked into the image — no
-  extra wiring needed.
+Copy [.env.example](.env.example) to `.env` and fill it in. All env vars are
+optional except `ANTHROPIC_API_KEY`.
+
+| Variable | Purpose |
+|----------|---------|
+| `ANTHROPIC_API_KEY` | **Required.** Claude Code authentication. |
+| `KROCLAUDE_SSH_AUTHORIZED_KEY` | Verbatim authorized_keys content (one or more public keys, one per line). Required to SSH in. |
+| `KROCLAUDE_SSH_HOST_PORT` | Host-side port override (default `2221`). |
+| `KROCLAUDE_PUBLIC_HOST` | Your deployment URL — used by `kc-forward` to print ready-to-paste `ssh -L` commands. |
+| `TZ`, `GIT_USER_NAME`, `GIT_USER_EMAIL`, `NODE_OPTIONS` | Runtime niceties. |
+| `NOTIFY_URLS` | Apprise URLs for Stop/error notifications. |
+
+Persistent named volumes (declared in [docker-compose.yaml](docker-compose.yaml)):
+
+- `kroclaude-config` → `/home/claude/.claude` — CLI config, credentials, history, bundled skills/commands/agents/etc.
+- `kroclaude-workspace` → `/workspace` — your code.
+
+Both survive `docker compose down` and image rebuilds. Wipe with `down -v`.
 
 ## Deploy on Coolify
 
-Point a Coolify "Docker Compose" application at this repo. Set
-`ANTHROPIC_API_KEY` (and any other env vars from `.env.example`) as
-Coolify secrets. The compose file works as-is; the two named volumes are
-created on first boot and persist across redeploys.
+1. Point a Coolify "Docker Compose" application at this repo.
+2. Set `ANTHROPIC_API_KEY` and `KROCLAUDE_SSH_AUTHORIZED_KEY` (and any other
+   env vars you need) as Coolify secrets.
+3. Add `docker network create kroclaude-apps` as a Coolify post-deployment
+   command (idempotent). Required for the container-spawning workflow below;
+   harmless if you don't use it.
+4. Deploy. The two named volumes are created on first boot and persist
+   across redeploys.
 
 ## Remote SSH access
 
-The image runs a hardened OpenSSH server on container port `2221`
-(default host port `2221`, overridable via
-`KROCLAUDE_SSH_HOST_PORT`). Authentication is **public-key only** —
-set `KROCLAUDE_SSH_AUTHORIZED_KEY` to the verbatim contents of your
-`authorized_keys` (one or more public keys, one per line) in `.env`
-or a Coolify secret, then `ssh -p 2221 claude@<host>`. Passwords,
-keyboard-interactive auth, and root login are disabled. See
+The image runs a hardened OpenSSH server on container port `2221` (default
+host port `2221`, overridable via `KROCLAUDE_SSH_HOST_PORT`). Authentication
+is **public-key only** — set `KROCLAUDE_SSH_AUTHORIZED_KEY` to your public
+key(s) and `ssh -p 2221 claude@<host>`. Passwords, keyboard-interactive auth,
+and root login are disabled. See
 [`specs/003-ssh-access/quickstart.md`](specs/003-ssh-access/quickstart.md)
-for setup, key rotation, and troubleshooting.
+for key rotation and troubleshooting.
 
-## Bundled skills
+## Spawning containers from inside KroClaude
 
-Claude Code skills committed under [`skills/`](skills/) at the repo root
-are baked into the image at build time and reflected into the
-persistent `~/.claude/skills/` directory on every container start. Any
-skill you install in the running container under that directory whose
-name is not in the bundled set is preserved verbatim across restarts,
-image rebuilds, and pulls of new image versions. See
-[`specs/002-skill-bundling/quickstart.md`](specs/002-skill-bundling/quickstart.md)
-for how to add a bundled skill, install a user skill, or reset state.
+KroClaude can launch sibling containers on the host's Docker daemon and
+expose their app ports back to your laptop over SSH. Four helper commands
+are pre-installed:
+
+| Command | Purpose |
+|---------|---------|
+| `kc-run [OPTS] IMAGE [CMD]` | Wrap `docker run` with KroClaude defaults (auto-name, shared network, label). |
+| `kc-ps [-a]` | List only KroClaude-spawned containers. |
+| `kc-stop NAME` | Stop + remove a managed container. Refuses unlabeled targets. |
+| `kc-forward CONTAINER PORT [LOCAL_PORT]` | Print the `ssh -L` line to paste on your laptop. |
+
+Typical session:
+
+```bash
+ssh -p 2221 claude@<host>                       # in your terminal
+kc-run -d --name myapp ghcr.io/your/app:latest  # spawn
+kc-forward myapp 3000                           # → prints `ssh -N -L 3000:myapp:3000 ...`
+# Paste that line in a new local terminal, then open http://localhost:3000
+```
+
+`kc-run` blocks dangerous flags (`--privileged`, host bind mounts, host
+namespaces) by default; pass `--unsafe` to override (audit-logged). See
+[`specs/004-docker-spawning/quickstart.md`](specs/004-docker-spawning/quickstart.md).
+
+**Prerequisite**: the host must have Docker, the `/var/run/docker.sock`
+bind-mount in the compose file (default), and the `kroclaude-apps` network
+must exist (`docker network create kroclaude-apps`).
+
+## Bundled customizations
+
+Anything you drop under [`config/`](config/) at the repo root gets baked
+into the image at build time and reflected into `~/.claude/` on every
+container start. Drop a folder/file → rebuild → restart → it's there.
+
+| Drop here | Becomes | Pattern |
+|-----------|---------|---------|
+| `config/skills/<name>/SKILL.md` | A Claude Code skill | One folder per skill |
+| `config/commands/<name>.md` | A `/<name>` slash command | One file per command |
+| `config/agents/<name>/agent.md` | A sub-agent (callable via the Agent tool) | One folder per agent |
+| `config/output-styles/<name>.md` | A selectable output style | One file per style |
+| `config/hooks.d/<name>.json` | A hook merged into `~/.claude/settings.json` | One JSON fragment per file |
+| `config/mcp-servers.d/<name>.json` | An MCP server merged into `~/.claude/.mcp.json` | One JSON fragment per file |
+| `config/plugins/<name>/.claude-plugin/plugin.json` | A Claude Code plugin tree | One folder per plugin |
+
+**Anything you install manually inside the running container** (under
+`~/.claude/skills/`, `~/.claude/commands/`, etc.) is preserved across
+restarts and rebuilds — the bundling pipeline only touches items whose
+names match the bundled set. To replace a hand-installed item with a
+bundled one, rename your local copy.
+
+For hook and MCP fragments: multiple files are merged in
+filename-lex order (later wins on key collision — name fragments
+`00-base.json`, `99-override.json` to control precedence). Bundled
+entries overlay any same-named entry already in `settings.json` /
+`.mcp.json`. See
+[`specs/005-config-bundling/quickstart.md`](specs/005-config-bundling/quickstart.md)
+for fragment shapes and examples.
+
+The two seed files [`config/settings.json`](config/settings.json) and
+[`config/CLAUDE.md`](config/CLAUDE.md) are special: they're copied
+into the persistent volume **once on first boot** (sentinel-gated).
+Edits to those files in the repo affect new deployments only — to
+re-seed an existing container, wipe the `kroclaude-config` volume.
+
+## Maintenance
+
+- **Update Claude Code or any tool** → `docker compose build && docker compose up -d`. Volumes survive.
+- **Add a skill / command / agent / hook / MCP / plugin** → drop the file under `config/`, then build + up.
+- **Rotate SSH keys** → update `KROCLAUDE_SSH_AUTHORIZED_KEY` and `docker compose up -d` (recreate). The new key takes effect on the next SSH connection; the old key stops working immediately.
+- **Wipe state** → `docker compose down -v` (deletes both volumes; you lose authenticated sessions, history, hand-installed skills, and `/workspace` content).
+- **Backups** → snapshot the two named volumes (`kroclaude-config`, `kroclaude-workspace`) on whatever cadence makes sense for you. Coolify's volume backup integration covers them.
 
 ## Credits
 
@@ -68,16 +144,9 @@ licensing.
 
 ## Third-party software
 
-Bundled in the image (see [Dockerfile](Dockerfile) for the authoritative
-list and versions):
-
-- **Base**: Debian Bookworm (`node:node:lts-trixie`), s6-overlay v3.
-- **CLIs**: Claude Code, [`@openai/codex`](https://www.npmjs.com/package/@openai/codex), [`@google/gemini-cli`](https://www.npmjs.com/package/@google/gemini-cli), GitHub CLI (`gh`).
-- **Toolchain**: Node.js 24, TypeScript, tsx, pnpm, Vite, esbuild, ESLint,
-  Prettier, Python 3, pip.
-- **Browser automation**: Chromium, Xvfb, Playwright, Lighthouse.
-- **Shell / dev tools**: tmux, fzf, ripgrep, fd, jq, tree, bubblewrap.
-- **DB clients**: postgresql-client, redis-tools, sqlite3.
-- **Media**: ImageMagick, ffmpeg.
-- **Python libraries (notable)**: requests, httpx, BeautifulSoup, Pillow,
-  pandas, Playwright, apprise, rich.
+Bundled in the image; see [Dockerfile](Dockerfile) for the authoritative
+list and versions. Highlights: Debian Trixie + s6-overlay base; Claude
+Code, Codex, Gemini CLIs; Node.js 24 + TypeScript/Vite/esbuild/ESLint/
+Prettier; Python 3 + Playwright/pandas/httpx/etc.; Chromium + Xvfb for
+browser automation; GitHub CLI; jq; Postgres/Redis/SQLite clients;
+ImageMagick/ffmpeg; Docker CLI (client only — uses host daemon).

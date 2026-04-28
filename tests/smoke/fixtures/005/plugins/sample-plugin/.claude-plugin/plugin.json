@@ -1,0 +1,5 @@
+{
+  "name": "sample-plugin",
+  "description": "Smoke-test fixture plugin for feature 005-config-bundling.",
+  "version": "0.1.0"
+}

@@ -11,7 +11,12 @@ set -euo pipefail
 
 CLAUDE_HOME=/home/claude
 CONFIG_DIR="$CLAUDE_HOME/.claude"
-SOURCE_DIR=/usr/local/share/kroclaude
+# Image-time root for bundled config (feature 005-config-bundling).
+# Contains settings.json + CLAUDE.md (first-boot seed) plus the seven
+# customization-type subdirectories (skills, commands, agents,
+# output-styles, hooks.d, mcp-servers.d, plugins) that get reflected
+# into ~/.claude/<type>/ on every boot via the helpers defined below.
+SOURCE_DIR=/usr/local/share/kroclaude/config
 SENTINEL="$CONFIG_DIR/.kroclaude-bootstrapped"
 
 # ---------- First-boot seeding ----------
@@ -87,24 +92,142 @@ JSON
     echo "[entrypoint] First-boot seed complete."
 fi
 
-# ---------- Bundled skill reflection (feature 002-skill-bundling) ----------
-# Mirrors /usr/local/share/kroclaude/skills/<name>/ into
-# /home/claude/.claude/skills/<name>/ on EVERY boot (NOT gated by the
-# sentinel — FR-002). User-installed skills (different names) are never
-# enumerated or touched (FR-003). No-op when the source is missing or
-# empty (FR-004).
-SKILLS_SRC=/usr/local/share/kroclaude/skills
-SKILLS_DEST="$CONFIG_DIR/skills"
-if [ -d "$SKILLS_SRC" ] && [ -n "$(ls -A "$SKILLS_SRC" 2>/dev/null)" ]; then
-    install -d -o claude -g claude "$SKILLS_DEST"
-    for skill_src in "$SKILLS_SRC"/*/; do
-        [ -d "$skill_src" ] || continue
-        skill_name=$(basename "$skill_src")
-        rm -rf "$SKILLS_DEST/$skill_name"
-        cp -r "$skill_src" "$SKILLS_DEST/$skill_name"
-        chown -R claude:claude "$SKILLS_DEST/$skill_name"
+# ============================================================================
+# Bundled customization reflection (feature 005-config-bundling)
+# ----------------------------------------------------------------------------
+# Reflects each per-type subdirectory of $SOURCE_DIR/<type>/ into
+# ~/.claude/<type>/ on EVERY boot. Three helper functions cover the three
+# reflection patterns:
+#
+#   reflect_dir_of_dirs   — skills, agents, plugins (per-item is a directory)
+#   reflect_dir_of_files  — commands, output-styles (per-item is a file)
+#   merge_fragments       — hooks.d, mcp-servers.d (jq-merged into a target)
+#
+# Invariants (enforced by every helper):
+#   - No-op when source is missing or empty (FR-004 / generalized FR-005).
+#   - Per-item failure isolation: a single bad item logs a WARN and skips;
+#     other items of the same type and ALL items of other types still
+#     reflect (FR-009 / SC-004). Container always boots.
+#   - User-installed items under ~/.claude/<type>/ whose names do NOT
+#     collide with bundled names are never enumerated, never touched
+#     (generalizes feature 002 FR-003 across all seven types).
+#   - All reflected files end up owned by claude:claude (UID/GID 1000).
+#   - Re-runs are idempotent (byte-identical output for identical input).
+#
+# Contracts: specs/005-config-bundling/contracts/{reflection-helpers,merge-filters}.md
+# ============================================================================
+
+reflect_dir_of_dirs() {
+    local src="$1" dest="$2"
+    [ -d "$src" ] && [ -n "$(ls -A "$src" 2>/dev/null)" ] || return 0
+    install -d -o claude -g claude "$dest"
+    local item name
+    for item in "$src"/*/; do
+        [ -d "$item" ] || continue
+        name=$(basename "$item")
+        # .gitkeep guard: skip the placeholder file masquerading as dir
+        [ "$name" = ".gitkeep" ] && continue
+        rm -rf "$dest/$name" \
+            && cp -r "$item" "$dest/$name" \
+            && chown -R claude:claude "$dest/$name" \
+            || { echo "[entrypoint] WARN: skipped reflecting $src/$name" >&2; continue; }
     done
-fi
+}
+
+reflect_dir_of_files() {
+    local src="$1" dest="$2" ext="$3"
+    [ -d "$src" ] && [ -n "$(ls -A "$src" 2>/dev/null)" ] || return 0
+    install -d -o claude -g claude "$dest"
+    local file name
+    while IFS= read -r file; do
+        [ -f "$file" ] || continue
+        name=$(basename "$file")
+        rm -f "$dest/$name" \
+            && cp "$file" "$dest/$name" \
+            && chown claude:claude "$dest/$name" \
+            || { echo "[entrypoint] WARN: skipped reflecting $file" >&2; continue; }
+    done < <(LC_ALL=C find "$src" -maxdepth 1 -type f -name "*.$ext" | LC_ALL=C sort)
+}
+
+# jq filters (defined as bash variables for locality with the helpers).
+# Both filters consume `$fragments` — a JSON ARRAY of all bundled
+# fragments in lex order. This is required (vs a single pre-folded
+# bundle) because jq's `*` operator REPLACES nested arrays rather than
+# concatenating them, which would let the lex-last fragment's
+# `.hooks.<event>` array clobber earlier fragments' entries for
+# different matchers under the same event.
+#
+# Precedence rules (FR-008):
+#   - within bundle: lex-order, later fragment wins on key collision
+#   - bundle vs target: bundled wins (matches feature 002 FR-003)
+#
+# See specs/005-config-bundling/contracts/merge-filters.md for proofs.
+read -r -d '' MCP_MERGE_FILTER <<'JQ' || true
+.mcpServers = (
+  reduce ($fragments[] | (.mcpServers // {})) as $b
+    ((.mcpServers // {}); . * $b)
+)
+JQ
+read -r -d '' HOOKS_MERGE_FILTER <<'JQ' || true
+def merge_hooks_event(existing; bundled):
+  ((existing // []) + (bundled // []))
+  | group_by(.matcher // "")
+  | map(reduce .[] as $x ({}; . * $x));
+
+.hooks = (
+  (.hooks // {}) as $cur
+  | (($cur | keys) + ([$fragments[] | (.hooks // {}) | keys] | flatten) | unique) as $events
+  | reduce $events[] as $e
+      ($cur;
+       .[$e] = merge_hooks_event(
+                 .[$e];
+                 [$fragments[] | (.hooks // {})[$e] // []] | add
+               ))
+)
+JQ
+
+merge_fragments() {
+    local src_dir="$1" target="$2" filter_var="$3" default_target_json="$4"
+    [ -d "$src_dir" ] && [ -n "$(ls -A "$src_dir" 2>/dev/null)" ] || return 0
+    local filter="${!filter_var}"
+    # Append all valid fragments (in lex order) to a JSON array. Each
+    # array element is the WHOLE fragment object — the merge filter
+    # decides per-key how to combine them (object-merge for mcpServers,
+    # event-keyed concat-then-group_by-matcher for hooks).
+    local fragments_json='[]' f
+    while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        if ! jq empty "$f" >/dev/null 2>&1; then
+            echo "[entrypoint] WARN: skipping malformed fragment $f" >&2
+            continue
+        fi
+        fragments_json=$(jq -s '.[0] + [.[1]]' <(printf '%s' "$fragments_json") "$f") \
+            || { echo "[entrypoint] WARN: append failed on $f" >&2; continue; }
+    done < <(LC_ALL=C find "$src_dir" -maxdepth 1 -type f -name '*.json' | LC_ALL=C sort)
+    [ "$fragments_json" = '[]' ] && return 0
+    # Ensure target file exists so jq has something to read.
+    if [ ! -f "$target" ]; then
+        install -d -o claude -g claude "$(dirname "$target")"
+        printf '%s\n' "$default_target_json" > "$target"
+        chown claude:claude "$target"
+    fi
+    local merged
+    merged=$(jq --argjson fragments "$fragments_json" "$filter" "$target") \
+        || { echo "[entrypoint] WARN: jq merge into $target failed" >&2; return 0; }
+    printf '%s\n' "$merged" > "$target.tmp" \
+        && mv "$target.tmp" "$target" \
+        && chown claude:claude "$target" \
+        || { echo "[entrypoint] WARN: write of merged $target failed" >&2; return 0; }
+}
+
+# ---- Per-type reflection call sites (one line each — SC-003) ----
+reflect_dir_of_dirs  "$SOURCE_DIR/skills"        "$CONFIG_DIR/skills"
+reflect_dir_of_dirs  "$SOURCE_DIR/agents"        "$CONFIG_DIR/agents"
+reflect_dir_of_dirs  "$SOURCE_DIR/plugins"       "$CONFIG_DIR/plugins"
+reflect_dir_of_files "$SOURCE_DIR/commands"      "$CONFIG_DIR/commands"      md
+reflect_dir_of_files "$SOURCE_DIR/output-styles" "$CONFIG_DIR/output-styles" md
+merge_fragments      "$SOURCE_DIR/hooks.d"        "$CONFIG_DIR/settings.json" HOOKS_MERGE_FILTER '{}'
+merge_fragments      "$SOURCE_DIR/mcp-servers.d"  "$CONFIG_DIR/.mcp.json"     MCP_MERGE_FILTER   '{"mcpServers":{}}'
 
 # ---------- Docker socket group bootstrap (feature 004-docker-spawning) ----------
 # Detect the GID of the bind-mounted /var/run/docker.sock and add `claude`
