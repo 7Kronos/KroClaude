@@ -167,7 +167,8 @@ $COMPOSE build --no-cache >/dev/null
 $COMPOSE up -d --force-recreate
 wait_healthy
 new_fixture=$(as_claude "cat /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
-[ "$new_fixture" = "$FIXTURE_V2" ] \
+expected_fixture=$(cat "$FIXTURE_SRC/SKILL.md")
+[ "$new_fixture" = "$expected_fixture" ] \
     || fail "bundled skill update did not propagate (got: $new_fixture)"
 user_after=$(as_claude "cat /home/claude/.claude/skills/$USER_SKILL_NAME/SKILL.md")
 [ "$user_after" = "USER-CONTENT-v1" ] \
