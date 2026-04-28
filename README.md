@@ -1,5 +1,8 @@
 # KroClaude
 
+[![CI](https://github.com/7Kronos/KroClaude/actions/workflows/ci.yml/badge.svg)](https://github.com/7Kronos/KroClaude/actions/workflows/ci.yml)
+[![Security scan](https://github.com/7Kronos/KroClaude/actions/workflows/security-scan.yml/badge.svg)](https://github.com/7Kronos/KroClaude/actions/workflows/security-scan.yml)
+
 A reproducible Claude Code shell environment, packaged as a Dockerfile and
 docker-compose stack and deployable on Coolify. Non-root by default,
 shell-only (no inbound ports), with persistent named volumes for config and
@@ -68,7 +71,7 @@ licensing.
 Bundled in the image (see [Dockerfile](Dockerfile) for the authoritative
 list and versions):
 
-- **Base**: Debian Bookworm (`node:24-bookworm-slim`), s6-overlay v3.
+- **Base**: Debian Bookworm (`node:node:lts-trixie`), s6-overlay v3.
 - **CLIs**: Claude Code, [`@openai/codex`](https://www.npmjs.com/package/@openai/codex), [`@google/gemini-cli`](https://www.npmjs.com/package/@google/gemini-cli), GitHub CLI (`gh`).
 - **Toolchain**: Node.js 24, TypeScript, tsx, pnpm, Vite, esbuild, ESLint,
   Prettier, Python 3, pip.

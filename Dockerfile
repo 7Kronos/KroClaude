@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24-bookworm-slim
+FROM node:lts-trixie
 
 LABEL org.opencontainers.image.source=https://github.com/7Kronos/KroClaude
 LABEL org.opencontainers.image.description="Claude Code shell environment"
@@ -85,7 +85,7 @@ ENV PATH="/home/claude/.local/bin:${PATH}"
 # /etc/environment is read by pam_env (UsePAM yes in sshd_config) so SSH
 # sessions inherit the same PATH that ENV PATH gives the entrypoint.
 RUN printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n' \
-      > /etc/environment
+    > /etc/environment
 
 # ---------- npm global packages (FR-003, FR-003a) ----------
 RUN npm i -g \
@@ -151,7 +151,7 @@ RUN printf '\nexport HISTFILE=/home/claude/.claude/.bash_history\nexport HISTSIZ
 # SSH login, `bash -l`). Non-interactive `ssh user@host cmd` invocations
 # stay in the user's HOME per standard SSH convention.
 RUN printf 'if [ -d /workspace ] && [ "$PWD" = "$HOME" ]; then cd /workspace; fi\n' \
-      > /etc/profile.d/kroclaude.sh && \
+    > /etc/profile.d/kroclaude.sh && \
     chmod 0644 /etc/profile.d/kroclaude.sh
 
 # ---------- Working directory ----------
@@ -161,8 +161,8 @@ WORKDIR /workspace
 # Extended in feature 003-ssh-access: also requires sshd to be listening on 2221.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD pgrep -x Xvfb >/dev/null \
-     && command -v claude >/dev/null \
-     && bash -c '</dev/tcp/127.0.0.1/2221' 2>/dev/null
+    && command -v claude >/dev/null \
+    && bash -c '</dev/tcp/127.0.0.1/2221' 2>/dev/null
 
 # ---------- s6-overlay as PID 1 via entrypoint ----------
 # PID 1 runs as root (required by s6-overlay /init for service supervision).
