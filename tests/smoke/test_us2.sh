@@ -51,8 +51,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Place the bundled-skill fixture in source BEFORE any build, so every
-# `compose build` in this test (including Scenario 3's --no-cache run)
-# bakes it into the image.
+# `compose build` in this test bakes it into the image.
 mkdir -p "$FIXTURE_SRC"
 printf '%s' "$FIXTURE_V1" > "$FIXTURE_SRC/SKILL.md"
 
@@ -85,7 +84,7 @@ in_ctn 'grep -q persist-cred  /home/claude/.claude/.us2-config-token' || fail "c
 # ---------- Scenario 3: image rebuild ----------
 log "Scenario 3 — image rebuild preserves volumes"
 $COMPOSE down --remove-orphans
-$COMPOSE build --no-cache >/dev/null
+$COMPOSE build >/dev/null
 $COMPOSE up -d --force-recreate
 wait_healthy
 in_ctn 'grep -q persist-token /workspace/.us2-workspace-token' || fail "workspace token lost across rebuild"
@@ -150,7 +149,7 @@ log "Scenario 8 (US2) — bundled skill removed from source: in-volume copy pres
 captured=$(as_claude "cat /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
 mv "$FIXTURE_SRC" "$FIXTURE_BACKUP"
 $COMPOSE down --remove-orphans
-$COMPOSE build --no-cache >/dev/null
+$COMPOSE build >/dev/null
 $COMPOSE up -d --force-recreate
 wait_healthy
 orphan_now=$(as_claude "cat /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
@@ -163,7 +162,7 @@ mv "$FIXTURE_BACKUP" "$FIXTURE_SRC"
 log "Scenario 9 (US3) — bundled update propagates, user skill untouched"
 printf '%s' "$FIXTURE_V2" > "$FIXTURE_SRC/SKILL.md"
 $COMPOSE down --remove-orphans
-$COMPOSE build --no-cache >/dev/null
+$COMPOSE build >/dev/null
 $COMPOSE up -d --force-recreate
 wait_healthy
 new_fixture=$(as_claude "cat /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
