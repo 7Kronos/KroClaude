@@ -36,6 +36,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl wget jq ripgrep fd-find unzip zip tree tmux fzf bat sudo bubblewrap \
     # Build & language toolchain (Node provided by base image)
     build-essential pkg-config python3 python3-pip python3-venv pipx \
+    # .NET runtime dep (libssl3 / libstdc++6 / zlib1g already pulled by base)
+    libicu76 \
     # Browser automation stack (FR-003b)
     chromium xvfb \
     fonts-liberation2 fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji \
@@ -68,13 +70,13 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 # at /var/run/docker.sock; see specs/004-docker-spawning/research.md §R1.
 RUN install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/debian/gpg \
-      -o /etc/apt/keyrings/docker.asc && \
+    -o /etc/apt/keyrings/docker.asc && \
     chmod a+r /etc/apt/keyrings/docker.asc && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-https://download.docker.com/linux/debian trixie stable" \
-      > /etc/apt/sources.list.d/docker.list && \
+    https://download.docker.com/linux/debian trixie stable" \
+    > /etc/apt/sources.list.d/docker.list && \
     apt-get update && apt-get install -y --no-install-recommends \
-      docker-ce-cli docker-buildx-plugin docker-compose-plugin && \
+    docker-ce-cli docker-buildx-plugin docker-compose-plugin && \
     rm -rf /var/lib/apt/lists/*
 
 # ---------- bat / fd symlinks (Debian names them batcat / fdfind) + locale ----------
@@ -122,6 +124,23 @@ RUN npm i -g \
 RUN curl -LsSf https://astral.sh/uv/install.sh \
     | UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
 
+# ---------- .NET SDKs (9, 10, 11-preview, side-by-side) ----------
+# Microsoft's dotnet-install.sh handles side-by-side majors in one
+# directory and supports the preview channel that the
+# packages.microsoft.com apt feed does not carry. Each channel always
+# installs the latest patch at build time.
+ENV DOTNET_ROOT=/usr/share/dotnet \
+    PATH="/usr/share/dotnet:${PATH}" \
+    DOTNET_CLI_TELEMETRY_OPTOUT=0 \
+    DOTNET_NOLOGO=1
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
+    chmod +x /tmp/dotnet-install.sh && \
+    /tmp/dotnet-install.sh --channel 9.0  --install-dir "$DOTNET_ROOT" --no-path && \
+    /tmp/dotnet-install.sh --channel 10.0 --install-dir "$DOTNET_ROOT" --no-path && \
+    /tmp/dotnet-install.sh --channel 11.0 --quality preview --install-dir "$DOTNET_ROOT" --no-path && \
+    rm /tmp/dotnet-install.sh && \
+    ln -sf "$DOTNET_ROOT/dotnet" /usr/local/bin/dotnet
+
 # ---------- Python packages (FR-003) ----------
 RUN pip install --no-cache-dir --break-system-packages \
     requests httpx beautifulsoup4 lxml \
@@ -165,8 +184,8 @@ COPY scripts/kc-forward    /usr/local/bin/kc-forward
 COPY config/ /usr/local/share/kroclaude/config/
 
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py \
-             /usr/local/bin/kc-run /usr/local/bin/kc-ps \
-             /usr/local/bin/kc-stop /usr/local/bin/kc-forward && \
+    /usr/local/bin/kc-run /usr/local/bin/kc-ps \
+    /usr/local/bin/kc-stop /usr/local/bin/kc-forward && \
     install -d -o claude -g claude /home/claude/.claude
 
 # ---------- Bash history persistence (research R9) ----------

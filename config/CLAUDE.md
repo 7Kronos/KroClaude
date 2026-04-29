@@ -23,6 +23,9 @@ its contents as facts and operating rules.
 - Python tooling: `pip`, `uv`, `pipx` (use `uv tool install ...` or
   `pipx install ...` to drop CLI tools into PATH without polluting
   the system site-packages).
+- .NET SDKs 9, 10, and 11 (preview), all addressed via the `dotnet`
+  muxer at `/usr/share/dotnet`. List installed SDKs with
+  `dotnet --list-sdks`.
 - npm globals: `typescript`, `tsx`, `pnpm`, `vite`, `esbuild`, `eslint`,
   `prettier`, `serve`, `nodemon`, `concurrently`, `dotenv-cli`,
   `lighthouse`.
