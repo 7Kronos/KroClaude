@@ -19,13 +19,44 @@ CONFIG_DIR="$CLAUDE_HOME/.claude"
 SOURCE_DIR=/usr/local/share/kroclaude/config
 SENTINEL="$CONFIG_DIR/.kroclaude-bootstrapped"
 
-# ---------- First-boot seeding ----------
+# ---------- First-boot seeding (kroclaude-config volume) ----------
 if [ ! -f "$SENTINEL" ]; then
-    install -d -o claude -g claude "$CONFIG_DIR" "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
+    install -d -o claude -g claude "$CONFIG_DIR"
 
     cp "$SOURCE_DIR/settings.json" "$CONFIG_DIR/settings.json"
     cp "$SOURCE_DIR/CLAUDE.md"     "$CONFIG_DIR/CLAUDE.md"
 
+    runuser -u claude -- git config --global safe.directory /workspace
+    runuser -u claude -- git config --global user.name  "${GIT_USER_NAME:-KroClaude User}"
+    runuser -u claude -- git config --global user.email "${GIT_USER_EMAIL:-noreply@kroclaude.local}"
+
+    # ~/.claude.json lives one level above the config volume; one-shot
+    # symlink into the volume so writes persist (research R11).
+    if [ ! -e "$CLAUDE_HOME/.claude.json" ] && [ ! -L "$CLAUDE_HOME/.claude.json" ]; then
+        ln -s "$CONFIG_DIR/.claude.json" "$CLAUDE_HOME/.claude.json"
+        chown -h claude:claude "$CLAUDE_HOME/.claude.json"
+    fi
+    if [ ! -f "$CONFIG_DIR/.claude.json" ]; then
+        echo '{"hasCompletedOnboarding":true,"installMethod":"native"}' > "$CONFIG_DIR/.claude.json"
+    fi
+
+    chown -R claude:claude "$CONFIG_DIR"
+    touch "$SENTINEL"
+    chown claude:claude "$SENTINEL"
+    echo "[entrypoint] First-boot seed complete."
+fi
+
+# ---------- Per-CLI dotdir seeding (idempotent, every boot) ----------
+# Codex (~/.codex) and Gemini (~/.gemini) live in their own named
+# volumes so credentials persist across redeploys. We can't gate
+# seeding on $SENTINEL (which lives in kroclaude-config) because a
+# user can add these volumes to an existing deployment where the
+# sentinel already exists — the volumes would then start empty and
+# never be seeded. Each write is "create-if-missing" so user-edited
+# files are never overwritten.
+install -d -o claude -g claude "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
+
+if [ ! -f "$CLAUDE_HOME/.codex/config.toml" ]; then
     cat > "$CLAUDE_HOME/.codex/config.toml" <<'TOML'
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
@@ -33,7 +64,9 @@ sandbox_mode = "workspace-write"
 [features]
 codex_hooks = true
 TOML
+fi
 
+if [ ! -f "$CLAUDE_HOME/.codex/hooks.json" ]; then
     cat > "$CLAUDE_HOME/.codex/hooks.json" <<'JSON'
 {
   "hooks": {
@@ -51,7 +84,9 @@ TOML
   }
 }
 JSON
+fi
 
+if [ ! -f "$CLAUDE_HOME/.gemini/settings.json" ]; then
     cat > "$CLAUDE_HOME/.gemini/settings.json" <<'JSON'
 {
   "hooks": {
@@ -71,26 +106,9 @@ JSON
   }
 }
 JSON
-
-    runuser -u claude -- git config --global safe.directory /workspace
-    runuser -u claude -- git config --global user.name  "${GIT_USER_NAME:-KroClaude User}"
-    runuser -u claude -- git config --global user.email "${GIT_USER_EMAIL:-noreply@kroclaude.local}"
-
-    # ~/.claude.json lives one level above the config volume; one-shot
-    # symlink into the volume so writes persist (research R11).
-    if [ ! -e "$CLAUDE_HOME/.claude.json" ] && [ ! -L "$CLAUDE_HOME/.claude.json" ]; then
-        ln -s "$CONFIG_DIR/.claude.json" "$CLAUDE_HOME/.claude.json"
-        chown -h claude:claude "$CLAUDE_HOME/.claude.json"
-    fi
-    if [ ! -f "$CONFIG_DIR/.claude.json" ]; then
-        echo '{"hasCompletedOnboarding":true,"installMethod":"native"}' > "$CONFIG_DIR/.claude.json"
-    fi
-
-    chown -R claude:claude "$CONFIG_DIR" "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
-    touch "$SENTINEL"
-    chown claude:claude "$SENTINEL"
-    echo "[entrypoint] First-boot seed complete."
 fi
+
+chown -R claude:claude "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
 
 # ============================================================================
 # Bundled customization reflection (feature 005-config-bundling)

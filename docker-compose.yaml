@@ -54,6 +54,12 @@ services:
     volumes:
       - kroclaude-config:/home/claude/.claude
       - kroclaude-workspace:/workspace
+      # Per-CLI auth volumes so `gh auth login`, `codex` and `gemini`
+      # credentials survive Coolify redeploys (claude-code creds live
+      # under ~/.claude and are already covered by kroclaude-config).
+      - kroclaude-gh:/home/claude/.config/gh
+      - kroclaude-codex:/home/claude/.codex
+      - kroclaude-gemini:/home/claude/.gemini
       # Feature 004 — Docker-out-of-Docker. Bind-mounting the host
       # socket grants effective host-root to anyone who can write to
       # it; SSH is key-only / claude-only as the access mitigation.
@@ -67,6 +73,9 @@ services:
 volumes:
   kroclaude-config:
   kroclaude-workspace:
+  kroclaude-gh:
+  kroclaude-codex:
+  kroclaude-gemini:
 
 networks:
   # Feature 004 — shared user-defined bridge network for KroClaude
