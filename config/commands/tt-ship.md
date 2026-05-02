@@ -69,3 +69,4 @@ time.
 - If the doc surface is large, prefer many narrow subagent slices
   over one broad agent: independent slices in parallel beat a single
   long pass.
+- Automatically perform the fixes, don't wait for the user to confirm (unless there is a critical issue)

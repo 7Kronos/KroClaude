@@ -27,7 +27,7 @@ continuing. Do not invent a feature.
    non-negotiable rule about relaying clarification choices to the
    user verbatim.
 
-2. **Survey the installed toolkit before generating tasks.** After
+2. **Survey the installed toolkit before calling the speckit commands.** After
    phase 3 (plan) and before phase 4 (tasks), list what's actually
    available so the task plan can lean on it:
    - Agents: `ls ~/.claude/agents/` plus any plugin-bundled agents.
@@ -69,6 +69,8 @@ continuing. Do not invent a feature.
 
 ## Hard rules
 
+- You have to call the speckit commands, don't interprete speckit skills
+- Never stop the full process, unless there is a critical clarification needed
 - The user's clarification choices win. Always.
 - Do not run `/speckit-implement` until `/speckit-analyze` is clean.
 - Match the project's commit-message style (look at `git log` first).
