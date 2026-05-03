@@ -101,7 +101,9 @@ ENV PATH="/home/claude/.local/bin:${PATH}"
 
 # /etc/environment is read by pam_env (UsePAM yes in sshd_config) so SSH
 # sessions inherit the same PATH that ENV PATH gives the entrypoint.
-RUN printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n' \
+# DOCKER_HOST is baked here too so login/SSH shells point at the dind
+# sidecar instead of the missing /var/run/docker.sock.
+RUN printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\nDOCKER_HOST="tcp://localhost:2375"\n' \
     > /etc/environment
 
 # ---------- npm global packages (FR-003, FR-003a) ----------
