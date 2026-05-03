@@ -30,20 +30,26 @@ if [ ! -f "$SENTINEL" ]; then
     runuser -u claude -- git config --global user.name  "${GIT_USER_NAME:-KroClaude User}"
     runuser -u claude -- git config --global user.email "${GIT_USER_EMAIL:-noreply@kroclaude.local}"
 
-    # ~/.claude.json lives one level above the config volume; one-shot
-    # symlink into the volume so writes persist (research R11).
-    if [ ! -e "$CLAUDE_HOME/.claude.json" ] && [ ! -L "$CLAUDE_HOME/.claude.json" ]; then
-        ln -s "$CONFIG_DIR/.claude.json" "$CLAUDE_HOME/.claude.json"
-        chown -h claude:claude "$CLAUDE_HOME/.claude.json"
-    fi
-    if [ ! -f "$CONFIG_DIR/.claude.json" ]; then
-        echo '{"hasCompletedOnboarding":true,"installMethod":"native"}' > "$CONFIG_DIR/.claude.json"
-    fi
-
     chown -R claude:claude "$CONFIG_DIR"
     touch "$SENTINEL"
     chown claude:claude "$SENTINEL"
     echo "[entrypoint] First-boot seed complete."
+fi
+
+# ---------- ~/.claude.json symlink (idempotent, every boot) ----------
+# Lives in the writable container layer (not in the volume), so it
+# disappears on every container recreation. Without it, claude-code
+# can't find its `oauthAccount` pointer and the user has to re-login.
+# Re-create the symlink → volume on every boot. Seed the target file
+# only if missing so user-written content is preserved.
+if [ ! -L "$CLAUDE_HOME/.claude.json" ] || \
+   [ "$(readlink "$CLAUDE_HOME/.claude.json" 2>/dev/null)" != "$CONFIG_DIR/.claude.json" ]; then
+    ln -sfn "$CONFIG_DIR/.claude.json" "$CLAUDE_HOME/.claude.json"
+    chown -h claude:claude "$CLAUDE_HOME/.claude.json"
+fi
+if [ ! -f "$CONFIG_DIR/.claude.json" ]; then
+    echo '{"hasCompletedOnboarding":true,"installMethod":"native"}' > "$CONFIG_DIR/.claude.json"
+    chown claude:claude "$CONFIG_DIR/.claude.json"
 fi
 
 # ---------- Per-CLI dotdir seeding (idempotent, every boot) ----------
@@ -109,6 +115,16 @@ JSON
 fi
 
 chown -R claude:claude "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
+
+# ---------- ~/.config/gh ownership (idempotent, every boot) ----------
+# Docker creates the named-volume mount target as root:root when the
+# volume is empty (first boot) — gh runs as claude and can't write
+# hosts.yml until we fix that. Also chown the parent ~/.config so
+# other CLIs the user installs later can drop dotdirs there. Don't
+# recurse into ~/.config/gh on later boots: anything inside is
+# already claude-owned (gh wrote it).
+install -d "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
+chown claude:claude "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
 
 # ============================================================================
 # Bundled customization reflection (feature 005-config-bundling)
