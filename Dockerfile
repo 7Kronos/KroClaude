@@ -64,10 +64,10 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     apt-get update && apt-get install -y --no-install-recommends gh && \
     rm -rf /var/lib/apt/lists/*
 
-# ---------- Docker CLI (feature 004-docker-spawning) ----------
-# Client only — NO daemon (docker-ce / containerd.io are intentionally
-# omitted). The host's daemon is reached via the bind-mounted socket
-# at /var/run/docker.sock; see specs/004-docker-spawning/research.md §R1.
+# ---------- Docker CLI (client only) ----------
+# Talks to the isolated `dind` sidecar over tcp://localhost:2375; the
+# sidecar shares this container's network namespace (see compose).
+# No daemon installed here — dockerd runs inside the dind container.
 RUN install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/debian/gpg \
     -o /etc/apt/keyrings/docker.asc && \
@@ -171,10 +171,6 @@ RUN chmod +x /etc/s6-overlay/s6-rc.d/sshd/run && \
 # ---------- Helper scripts and default configs ----------
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/notify.py     /usr/local/bin/notify.py
-COPY scripts/kc-run        /usr/local/bin/kc-run
-COPY scripts/kc-ps         /usr/local/bin/kc-ps
-COPY scripts/kc-stop       /usr/local/bin/kc-stop
-COPY scripts/kc-forward    /usr/local/bin/kc-forward
 # ---------- Bundled Claude Code customization (feature 005-config-bundling) ----------
 # Single read-only image-time copy of the entire /config/ tree, replacing
 # the granular per-file COPYs and the legacy /skills/ COPY. The entrypoint
@@ -183,9 +179,7 @@ COPY scripts/kc-forward    /usr/local/bin/kc-forward
 # feature 001 contract preserved). See specs/005-config-bundling/.
 COPY config/ /usr/local/share/kroclaude/config/
 
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py \
-    /usr/local/bin/kc-run /usr/local/bin/kc-ps \
-    /usr/local/bin/kc-stop /usr/local/bin/kc-forward && \
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py && \
     install -d -o claude -g claude /home/claude/.claude
 
 # ---------- Bash history persistence (research R9) ----------

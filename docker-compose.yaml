@@ -43,10 +43,10 @@ services:
       # In-container SSH port is fixed at 2221; this var configures the
       # HOST-side port override only.
       KROCLAUDE_SSH_HOST_PORT: "${KROCLAUDE_SSH_HOST_PORT:-2221}"
-      # Feature 004 — public hostname used by `kc-forward` to print a
-      # ready-to-paste `ssh -L` command. When unset, kc-forward emits
-      # the literal placeholder `<host>` and a one-line warning.
-      KROCLAUDE_PUBLIC_HOST: "${KROCLAUDE_PUBLIC_HOST:-}"
+      # Talks to the dind sidecar (shared net namespace → localhost).
+      # Daemon is isolated: `docker ps` inside this container only
+      # sees children of the dind sidecar, never host containers.
+      DOCKER_HOST: "tcp://localhost:2375"
 
     ports:
       # Feature 003 — SSH access. Host port overridable via env.
@@ -61,15 +61,26 @@ services:
       - kroclaude-gh:/home/claude/.config/gh
       - kroclaude-codex:/home/claude/.codex
       - kroclaude-gemini:/home/claude/.gemini
-      # Feature 004 — Docker-out-of-Docker. Bind-mounting the host
-      # socket grants effective host-root to anyone who can write to
-      # it; SSH is key-only / claude-only as the access mitigation.
-      # See specs/004-docker-spawning/spec.md FR-014.
-      - /var/run/docker.sock:/var/run/docker.sock
 
-    networks:
-      - default
-      - kroclaude-apps
+  # Isolated Docker-in-Docker sidecar. Joins kroclaude's network
+  # namespace so localhost-published ports (the Aspire/.NET pattern)
+  # are directly reachable. The dind daemon's storage lives in a
+  # dedicated named volume — images and containers persist across
+  # redeploys, but are completely separate from the host's daemon.
+  # `privileged: true` is on dind only; the kroclaude container itself
+  # stays unprivileged.
+  dind:
+    image: docker:27-dind
+    container_name: kroclaude-dind
+    restart: unless-stopped
+    privileged: true
+    network_mode: "service:kroclaude"
+    depends_on:
+      - kroclaude
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - dind-data:/var/lib/docker
 
 volumes:
   kroclaude-config:
@@ -77,13 +88,4 @@ volumes:
   kroclaude-gh:
   kroclaude-codex:
   kroclaude-gemini:
-
-networks:
-  # Feature 004 — shared user-defined bridge network for KroClaude
-  # and every container spawned via `kc-run`. Declared external so
-  # `docker compose down -v` does NOT delete it and orphan siblings.
-  # Operator prerequisite (one-time):
-  #   docker network create kroclaude-apps
-  kroclaude-apps:
-    name: kroclaude-apps
-    external: true
+  dind-data:

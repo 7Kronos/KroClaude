@@ -11,7 +11,6 @@ SSH-accessible, with persistent named volumes for config and workspace state.
 
 ```bash
 cp .env.example .env          # set ANTHROPIC_API_KEY (and your SSH pubkey)
-docker network create kroclaude-apps   # one-time, see "Spawning containers" below
 docker compose build
 docker compose up -d
 docker exec -it -u claude kroclaude bash      # local shell
@@ -30,7 +29,6 @@ optional except `ANTHROPIC_API_KEY`.
 | `ANTHROPIC_API_KEY` | **Required.** Claude Code authentication. |
 | `KROCLAUDE_SSH_AUTHORIZED_KEY` | Verbatim authorized_keys content (one or more public keys, one per line). Required to SSH in. |
 | `KROCLAUDE_SSH_HOST_PORT` | Host-side port override (default `2221`). |
-| `KROCLAUDE_PUBLIC_HOST` | Your deployment URL — used by `kc-forward` to print ready-to-paste `ssh -L` commands. |
 | `TZ`, `GIT_USER_NAME`, `GIT_USER_EMAIL`, `NODE_OPTIONS` | Runtime niceties. |
 | `NOTIFY_URLS` | Apprise URLs for Stop/error notifications. |
 
@@ -46,10 +44,7 @@ Both survive `docker compose down` and image rebuilds. Wipe with `down -v`.
 1. Point a Coolify "Docker Compose" application at this repo.
 2. Set `ANTHROPIC_API_KEY` and `KROCLAUDE_SSH_AUTHORIZED_KEY` (and any other
    env vars you need) as Coolify secrets.
-3. Add `docker network create kroclaude-apps` as a Coolify post-deployment
-   command (idempotent). Required for the container-spawning workflow below;
-   harmless if you don't use it.
-4. Deploy. The two named volumes are created on first boot and persist
+3. Deploy. The named volumes are created on first boot and persist
    across redeploys.
 
 ## Remote SSH access
@@ -62,35 +57,17 @@ and root login are disabled. See
 [`specs/003-ssh-access/quickstart.md`](specs/003-ssh-access/quickstart.md)
 for key rotation and troubleshooting.
 
-## Spawning containers from inside KroClaude
+## Isolated Docker daemon
 
-KroClaude can launch sibling containers on the host's Docker daemon and
-expose their app ports back to your laptop over SSH. Four helper commands
-are pre-installed:
-
-| Command | Purpose |
-|---------|---------|
-| `kc-run [OPTS] IMAGE [CMD]` | Wrap `docker run` with KroClaude defaults (auto-name, shared network, label). |
-| `kc-ps [-a]` | List only KroClaude-spawned containers. |
-| `kc-stop NAME` | Stop + remove a managed container. Refuses unlabeled targets. |
-| `kc-forward CONTAINER PORT [LOCAL_PORT]` | Print the `ssh -L` line to paste on your laptop. |
-
-Typical session:
-
-```bash
-ssh -p 2221 claude@<host>                       # in your terminal
-kc-run -d --name myapp ghcr.io/your/app:latest  # spawn
-kc-forward myapp 3000                           # → prints `ssh -N -L 3000:myapp:3000 ...`
-# Paste that line in a new local terminal, then open http://localhost:3000
-```
-
-`kc-run` blocks dangerous flags (`--privileged`, host bind mounts, host
-namespaces) by default; pass `--unsafe` to override (audit-logged). See
-[`specs/004-docker-spawning/quickstart.md`](specs/004-docker-spawning/quickstart.md).
-
-**Prerequisite**: the host must have Docker, the `/var/run/docker.sock`
-bind-mount in the compose file (default), and the `kroclaude-apps` network
-must exist (`docker network create kroclaude-apps`).
+The compose stack runs a `docker:dind` sidecar alongside the main
+container. Inside KroClaude, `docker` (and anything that uses it —
+`.NET Aspire`, Testcontainers, ad-hoc `docker run`) targets this
+sidecar via `DOCKER_HOST=tcp://localhost:2375`, **not** the host
+daemon. `docker ps` inside the container only sees its own children;
+host containers are invisible. The sidecar shares KroClaude's network
+namespace, so containers it spawns are reachable via `localhost:<port>`
+for the standard port-publishing pattern. State persists in the
+`dind-data` named volume across redeploys.
 
 ## Bundled customizations
 
@@ -149,4 +126,4 @@ list and versions. Highlights: Debian Trixie + s6-overlay base; Claude
 Code, Codex, Gemini CLIs; Node.js 24 + TypeScript/Vite/esbuild/ESLint/
 Prettier; Python 3 + Playwright/pandas/httpx/etc.; Chromium + Xvfb for
 browser automation; GitHub CLI; jq; Postgres/Redis/SQLite clients;
-ImageMagick/ffmpeg; Docker CLI (client only — uses host daemon).
+ImageMagick/ffmpeg.

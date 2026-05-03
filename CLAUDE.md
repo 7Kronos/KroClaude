@@ -22,11 +22,5 @@ Prior feature references:
   FR-001 (source path moves from /skills/ to /config/skills/) but
   preserves all runtime behavior FRs — see feature 005 FR-012.
 - `003-ssh-access` — [specs/003-ssh-access/](specs/003-ssh-access/)
-  hardened sshd on port 2221, key-only, claude-only, with
-  `AllowTcpForwarding yes` (load-bearing for feature 004's
-  `kc-forward` SSH local-port-forward DX).
-- `004-docker-spawning` — [specs/004-docker-spawning/](specs/004-docker-spawning/)
-  Docker-out-of-Docker via host socket bind-mount + `kc-*` helpers
-  (kc-run / kc-ps / kc-stop / kc-forward) for spawning sibling
-  containers and reaching their ports via SSH local-forward.
+  hardened sshd on port 2221, key-only, claude-only.
 <!-- SPECKIT END -->
