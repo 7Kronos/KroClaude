@@ -20,6 +20,7 @@ services:
     cap_add:
       - SYS_ADMIN # FR-003b — Chromium sandbox
       - SYS_PTRACE # FR-003b — Chromium debugger probes
+      - NET_ADMIN # .NET Aspire DCP — manages local network state for the dashboard
     # FR-003b: relax seccomp for Chromium's syscall set on Bookworm.
     security_opt:
       - seccomp=unconfined # FR-003b — Chromium
