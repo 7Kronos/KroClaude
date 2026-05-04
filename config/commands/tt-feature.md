@@ -1,78 +1,188 @@
 ---
-description: "Drive an end-to-end Spec Kit feature implementation via the speckit-orchestrate skill, fanning each phase out to specialized sub-agents."
-argument-hint: "<feature description>"
+description: "Drive an end-to-end Spec Kit feature implementation by delegating each phase to a dedicated subagent. Mandatory subagent fan-out, severity-triaged clarifications, commits gated behind the PR keyword."
+argument-hint: "[PR] <feature description>"
 ---
 
 # /tt-feature
 
-You are the orchestrator for a full feature implementation. The feature
-description is below. Do whatever yields the best implementation
-quality, but ground every choice in the runbook from the
-`speckit-orchestrate` skill.
+You are the orchestrator for a full feature implementation. Your job is
+narrow: parse arguments, delegate every speckit phase to a subagent,
+keep an eagle eye on progress, triage clarifications by severity, and
+relay only what the user needs to decide. **You do not run any
+`/speckit-*` skill yourself.** You also keep your own context lean —
+never let subagents dump full artifacts back into your conversation.
 
-## Feature description
+## Argument parsing
+
+Raw arguments:
 
 ```text
 $ARGUMENTS
 ```
 
-If the description is empty, ask the user to provide one before
-continuing. Do not invent a feature.
+Apply these rules in order, before doing anything else:
 
-## How to run
+1. If `$ARGUMENTS` is empty → ask the user for a feature description
+   and stop. Do not invent a feature.
+2. If the first whitespace-delimited token equals `PR`
+   (case-insensitive) → set `COMMIT_MODE=pr` and treat the remainder
+   as the feature description.
+3. Otherwise → set `COMMIT_MODE=dry`. The feature description is the
+   full `$ARGUMENTS`.
 
-1. **Read the runbook.** Open the `speckit-orchestrate` skill at
-   `~/.claude/skills/speckit-orchestrate/SKILL.md` and follow its
-   pipeline, including the per-phase model recommendations and the
-   non-negotiable rule about relaying clarification choices to the
-   user verbatim.
+State the resolved `COMMIT_MODE` and the feature description back to
+the user in one line before starting phase 1.
 
-2. **Survey the installed toolkit before calling the speckit commands.** After
-   phase 3 (plan) and before phase 4 (tasks), list what's actually
-   available so the task plan can lean on it:
-   - Agents: `ls ~/.claude/agents/` plus any plugin-bundled agents.
-     Each entry is a subagent type you can invoke with the Agent tool.
-   - Skills: `ls ~/.claude/skills/` and the user-invocable skills
-     listed in the system reminders. Callable via the Skill tool.
-   Show the inventory to the user.
+## Hard rules (non-negotiable)
 
-3. **Recommend an agent/skill combo per major sub-feature.** Slice
-   the planned work (frontend / backend / infra / data / tests /
-   docs / etc.) and for each slice propose the best-fit subagent
-   from the installed set. Examples:
-   - .NET backend slice → a `dotnet-specialist` or `csharp-expert`
-     subagent if one is installed; otherwise `general-purpose` Agent
-     with an explicit .NET-focused prompt.
-   - React/TS frontend slice → a `frontend-engineer` /
-     `react-specialist` agent if available.
-   - DB schema → `database-architect` or similar.
-   - Cross-cutting code review → `code-reviewer` if installed.
-   Present the lineup as a table (slice, recommended agent, fallback)
-   and wait for the user to confirm or adjust before phase 6.
+- **Mandatory subagents.** Every speckit phase runs inside a subagent
+  spawned with the `Agent` tool. The orchestrator never invokes a
+  `/speckit-*` skill itself.
+- **Exact speckit commands.** Each subagent prompt MUST instruct the
+  subagent to invoke the exact `/speckit-*` slash command for its
+  phase via the Skill tool — `/speckit-specify`, `/speckit-clarify`,
+  `/speckit-plan`, `/speckit-tasks`, `/speckit-analyze`,
+  `/speckit-implement`. No paraphrasing, no reinterpreting, no
+  reimplementing. The speckit command itself handles branch creation
+  and artifact generation; the orchestrator does not enumerate paths
+  or restate goals.
+- **Lean context.** Subagents return only the structured report
+  defined below. They never paste full artifact contents. If the
+  orchestrator needs to verify something, it uses `Read` with a tight
+  line range — not another subagent dump.
+- **Commit gate.** In `COMMIT_MODE=dry` (default) it is FORBIDDEN to
+  run `git commit`, `git push`, or `/speckit-git-commit`, or to invoke
+  any tool that mutates git history. Writing artifacts under
+  `specs/<feature>/` is fine — those are not commits. In
+  `COMMIT_MODE=pr`, make exactly ONE commit at the end of phase 6
+  covering all artifacts and code, then push and open a PR.
+- **Critical clarifications win.** Anything classified as critical
+  halts the pipeline and goes to the user verbatim via
+  `AskUserQuestion`. The user's choice always wins.
+- **No phase 6 without a clean phase 5.** Do not start
+  `/speckit-implement` until the analyze phase reports no critical
+  inconsistencies.
 
-4. **Fan out per phase using subagents.** Where slices are
-   independent, launch multiple subagents in parallel (single message,
-   multiple Agent tool calls). Where they're not, serialize them.
-   Stay in the parent conversation as orchestrator — do not let a
-   subagent take control of the workflow.
+## Reference
 
-5. **Relay clarification questions to the user.** During phase 2, and
-   any time `[NEEDS CLARIFICATION]` markers appear in earlier phases,
-   surface every question and every option to the user verbatim.
-   NEVER pick on the user's behalf, even if one option looks obvious.
-   Wait for an explicit per-question answer before updating any
-   artifact.
+The `speckit-orchestrate` skill at
+`~/.claude/skills/speckit-orchestrate/SKILL.md` is your reference for
+pipeline ordering and per-phase model recommendations. Read it once
+at the start; do not re-read during the run.
 
-6. **Stop at phase boundaries to summarize.** After phases 1, 3, 4,
-   5, and 6, give the user a one-paragraph summary of what was
-   produced and what's next so they can intervene early.
+## Per-phase delegation protocol
 
-## Hard rules
+Run phases strictly in order: 1-Specify → 2-Clarify → 3-Plan →
+4-Tasks → 5-Analyze → 6-Implement. Phases have hard dependencies, so
+never run two in parallel. Within phase 6 only, independent slices
+(frontend / backend / infra / data / tests / docs) MAY be fanned out
+across multiple subagents in a single message — same protocol applies
+per slice.
 
-- You have to call the speckit commands, don't interprete speckit skills
-- Never stop the full process, unless there is a critical clarification needed
-- The user's clarification choices win. Always.
-- Do not run `/speckit-implement` until `/speckit-analyze` is clean.
-- Match the project's commit-message style (look at `git log` first).
-- Run the project's smoke / test suite at the end of phase 6, before
-  reporting the feature complete.
+For each phase:
+
+1. **Track.** Update `TodoWrite` so exactly one phase is `in_progress`.
+2. **Spawn one subagent** with `subagent_type: general-purpose` (or a
+   more specific installed agent if one obviously fits the slice for
+   phase 6). The prompt must contain only:
+   - The single instruction: "Invoke `/speckit-<phase>` via the Skill
+     tool. Do not paraphrase, reinterpret, or reimplement it. Pass
+     through the user's feature description as-is when the skill
+     requires it."
+   - The return contract (below).
+   - For phase 1: the feature description string.
+   - For phase 6 slices: the slice name (e.g. "backend", "frontend").
+   Nothing else. No goals, no path lists, no architectural hints —
+   the speckit skill owns that.
+3. **Read only the structured report** when the subagent returns.
+   Never let the subagent paste artifact contents.
+4. **Act on the report:**
+   - `STATUS: ok` → emit a 1–2 sentence phase summary to the user and
+     mark the todo complete.
+   - `STATUS: needs_clarification` → run severity triage (next
+     section).
+   - `STATUS: failed` → relay the failure reason to the user and stop
+     the pipeline. Do not auto-retry destructive failures.
+
+### Subagent return contract
+
+Every subagent MUST return a report ≤200 words with exactly these
+fields and nothing else:
+
+- `STATUS`: one of `ok` | `needs_clarification` | `failed`
+- `ARTIFACTS`: bullet list of paths written or changed (paths only,
+  no contents)
+- `CLARIFICATIONS`: list of `{severity, question, options}` where
+  `severity` is `critical` | `medium` | `low`. Empty if none.
+- `NOTES`: up to 3 bullets of next-step-relevant info (≤1 line each)
+
+Forbid the subagent from pasting file bodies, full diffs, or full
+speckit transcripts.
+
+## Severity triage for clarifications
+
+Apply these explicit rules to each item in `CLARIFICATIONS`:
+
+**critical** — relay verbatim to the user via `AskUserQuestion`.
+Halt the pipeline until every critical question has an explicit
+answer. Triggers:
+
+- Affects feature scope or user-visible behavior.
+- Security, auth, permissions, or privacy choice.
+- Data integrity, schema, migration, or persistence semantics.
+- External contract (API shape, protocol, wire format).
+- Cost, performance SLO, or availability target.
+- The orchestrator genuinely cannot infer the answer from the spec
+  or codebase.
+- **When in doubt, OR whenever the choice could dramatically change
+  the outcome of the feature** → critical.
+
+**medium / low** — orchestrator resolves proactively, then:
+
+- Records the decision and a one-line rationale so the next phase's
+  subagent can fold it into the spec's `Assumptions` section
+  (instruct the next subagent to add it; do not edit the spec
+  yourself).
+- Mentions the auto-resolution in the phase summary so the user can
+  object before the pipeline moves on.
+
+Triggers for medium/low:
+
+- Naming, formatting, or file-layout choices internal to the feature.
+- Defaults that match an obvious project convention (check
+  neighboring code with `Read` / `rg` if needed).
+- Test framework or fixture choices when the project already has one
+  installed.
+- Phrasing of internal log messages, comments, or doc strings.
+
+Mis-classifying a critical item as low is the failure mode this
+command is designed to prevent. Bias toward critical.
+
+## Toolkit survey (between phases 3 and 4)
+
+After phase 3 reports `STATUS: ok` and before spawning the phase 4
+subagent, do a one-shot inventory in the orchestrator (not via a
+subagent — this is a quick `ls`):
+
+- `ls ~/.claude/agents/` plus any plugin-bundled agents.
+- `ls ~/.claude/skills/` plus the user-invocable skills in the system
+  reminders.
+
+Present a short table: slice → recommended agent → fallback. This
+informs phase 6's per-slice fan-out. Wait for the user to confirm or
+adjust before phase 4.
+
+## Wrap-up
+
+After phase 6 reports `STATUS: ok` for every slice:
+
+1. Run the project's smoke / test suite (still required in dry mode).
+   If anything fails, report and stop — do not commit.
+2. If `COMMIT_MODE=pr`:
+   - Stage and create exactly ONE commit covering the whole feature.
+     Match the project's commit style (check `git log` first).
+   - Push the current feature branch with `git push -u origin <branch>`.
+   - Open a PR via `mcp__github__create_pull_request` (ready for
+     review, not draft).
+3. If `COMMIT_MODE=dry`: print a one-paragraph summary of what was
+   produced and explicitly state that nothing was committed.
