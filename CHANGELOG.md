@@ -10,6 +10,20 @@ Image tag versions are independent of the project constitution version.
 
 ### Added
 
+- **VS Code Remote-SSH persistence**: new `kroclaude-vscode` named
+  volume mounted at `/home/claude/.vscode-server`. The first time a
+  VS Code Remote-SSH client connects over the existing port-2221 SSH
+  channel, VS Code installs its server binary (~200 MB) and any
+  user-installed extensions under `~/.vscode-server`. Without a
+  dedicated volume, that install lived in the writable container
+  layer and was discarded on every redeploy, forcing a re-download +
+  re-install of every extension on the next connect. The entrypoint
+  fixes initial ownership of the empty volume to `claude:claude`
+  (same pattern already used for `~/.config/gh`).
+  - Semver impact: **MINOR** (additive — new volume; no change to
+    existing volume layout, mount points, or compose-environment
+    contract).
+
 - **NATS CLI** (`nats`): the official `nats-io/natscli` binary is now
   baked into the image at `/usr/local/bin/nats` for administering NATS
   servers, JetStream, and KV / object stores. Multi-arch (amd64 +

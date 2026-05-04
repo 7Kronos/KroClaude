@@ -36,6 +36,7 @@ Persistent named volumes (declared in [docker-compose.yaml](docker-compose.yaml)
 
 - `kroclaude-config` → `/home/claude/.claude` — CLI config, credentials, history, bundled skills/commands/agents/etc.
 - `kroclaude-workspace` → `/workspace` — your code.
+- `kroclaude-vscode` → `/home/claude/.vscode-server` — VS Code Remote-SSH server install and installed extensions (avoids re-download on every redeploy).
 
 Both survive `docker compose down` and image rebuilds. Wipe with `down -v`.
 

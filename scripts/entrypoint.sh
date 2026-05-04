@@ -126,6 +126,14 @@ chown -R claude:claude "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
 install -d "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
 chown claude:claude "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
 
+# ---------- ~/.vscode-server ownership (idempotent, every boot) ----------
+# Same root:root-on-empty-volume issue as ~/.config/gh above. VS Code
+# Remote-SSH connects as claude and writes its server install +
+# extensions here; without the chown, the first connect after a wipe
+# fails silently and VS Code falls back to re-downloading every time.
+install -d "$CLAUDE_HOME/.vscode-server"
+chown claude:claude "$CLAUDE_HOME/.vscode-server"
+
 # ============================================================================
 # Bundled customization reflection (feature 005-config-bundling)
 # ----------------------------------------------------------------------------
