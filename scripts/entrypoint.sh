@@ -263,6 +263,45 @@ reflect_dir_of_files "$SOURCE_DIR/output-styles" "$CONFIG_DIR/output-styles" md
 merge_fragments      "$SOURCE_DIR/hooks.d"        "$CONFIG_DIR/settings.json" HOOKS_MERGE_FILTER '{}'
 merge_fragments      "$SOURCE_DIR/mcp-servers.d"  "$CONFIG_DIR/.mcp.json"     MCP_MERGE_FILTER   '{"mcpServers":{}}'
 
+# ----------------------------------------------------------------------------
+# Plugin marketplace activation (feature 005 follow-up)
+# ----------------------------------------------------------------------------
+# Bundling plugin trees on disk is necessary but not sufficient — Claude
+# Code only activates plugins that are (a) registered through a known
+# marketplace and (b) listed in `enabledPlugins`. Three steps:
+#
+#   1. Reflect the entire $SOURCE_DIR/marketplace/ tree wholesale into
+#      ~/.claude/kroclaude-marketplace/ (NOT ~/.claude/plugins/, which
+#      Claude Code manages itself).
+#   2. Merge $SOURCE_DIR/plugin-defaults.json into ~/.claude/settings.json
+#      on every boot. This is the bundle's hook for top-level keys
+#      (extraKnownMarketplaces, enabledPlugins) that aren't covered by
+#      hooks.d/ or mcp-servers.d/. Bundle wins on collision.
+#   3. Clean up orphan plugin directories left under ~/.claude/plugins/
+#      by an earlier (pre-marketplace) bundle layout. Only the four
+#      previously-bundled names are touched — anything else under that
+#      directory is Claude Code's own state and is left alone.
+if [ -d "$SOURCE_DIR/marketplace" ]; then
+    rm -rf "$CONFIG_DIR/kroclaude-marketplace"
+    cp -r "$SOURCE_DIR/marketplace" "$CONFIG_DIR/kroclaude-marketplace" \
+        && chown -R claude:claude "$CONFIG_DIR/kroclaude-marketplace" \
+        || echo "[entrypoint] WARN: marketplace reflection failed" >&2
+fi
+
+if [ -f "$SOURCE_DIR/plugin-defaults.json" ] && [ -f "$CONFIG_DIR/settings.json" ]; then
+    if merged=$(jq -s '.[0] * .[1]' "$CONFIG_DIR/settings.json" "$SOURCE_DIR/plugin-defaults.json" 2>/dev/null); then
+        printf '%s\n' "$merged" > "$CONFIG_DIR/settings.json.tmp" \
+            && mv "$CONFIG_DIR/settings.json.tmp" "$CONFIG_DIR/settings.json" \
+            && chown claude:claude "$CONFIG_DIR/settings.json"
+    else
+        echo "[entrypoint] WARN: plugin-defaults.json merge into settings.json failed" >&2
+    fi
+fi
+
+for orphan in csharp-lsp commit-commands feature-dev claude-mem; do
+    [ -d "$CONFIG_DIR/plugins/$orphan" ] && rm -rf "$CONFIG_DIR/plugins/$orphan"
+done
+
 # ---------- SSH host keys + authorized_keys seeding (feature 003-ssh-access) ----------
 # Host keys are generated ONCE (FR-009 fingerprint stability) inside the
 # kroclaude-config volume so they survive container recreation.
