@@ -10,6 +10,12 @@ Image tag versions are independent of the project constitution version.
 
 ### Added
 
+- **NATS CLI** (`nats`): the official `nats-io/natscli` binary is now
+  baked into the image at `/usr/local/bin/nats` for administering NATS
+  servers, JetStream, and KV / object stores. Multi-arch (amd64 +
+  arm64), pinned via the `NATS_CLI_VERSION` build arg. Smoke verification
+  added to `tests/smoke/test_us1.sh` (PATH check).
+
 - **Remote SSH access** (feature 003-ssh-access): the image now runs a
   hardened OpenSSH server on container port `2221`, published to the
   host on the same port by default (override via

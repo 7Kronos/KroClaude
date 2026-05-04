@@ -125,5 +125,5 @@ Bundled in the image; see [Dockerfile](Dockerfile) for the authoritative
 list and versions. Highlights: Debian Trixie + s6-overlay base; Claude
 Code, Codex, Gemini CLIs; Node.js 24 + TypeScript/Vite/esbuild/ESLint/
 Prettier; Python 3 + Playwright/pandas/httpx/etc.; Chromium + Xvfb for
-browser automation; GitHub CLI; jq; Postgres/Redis/SQLite clients;
+browser automation; GitHub CLI; NATS CLI; jq; Postgres/Redis/SQLite clients;
 ImageMagick/ffmpeg.
