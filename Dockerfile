@@ -129,7 +129,7 @@ RUN npm i -g \
     serve nodemon concurrently \
     dotenv-cli \
     lighthouse \
-    claude-powerline \
+    @owloops/claude-powerline \
     @google/gemini-cli \
     @openai/codex
 
