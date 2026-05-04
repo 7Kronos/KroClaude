@@ -296,6 +296,14 @@ printf '%s\n' "${KROCLAUDE_SSH_AUTHORIZED_KEY:-}" > "$CLAUDE_HOME/.ssh/authorize
 chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
 chown claude:claude "$CLAUDE_HOME/.ssh/authorized_keys"
 
+# ---------- Final ownership safety-net (idempotent, every boot) ----------
+# Belt-and-braces sweep: any newly-added named volume mount, any path
+# Docker created root-owned on first boot, and any stray file written
+# during seeding before its targeted chown all get reconciled here.
+# Cheap on subsequent boots (already claude-owned) and avoids future
+# "I added a volume and forgot the chown" footguns.
+chown -R claude:claude "$CLAUDE_HOME" /workspace
+
 export DISPLAY=:99
 
 exec /init "$@"
