@@ -32,3 +32,11 @@ desktop.ini
 *.swp
 *.swo
 *~
+
+# Fetched at docker build by scripts/fetch-plugins.sh — do not commit.
+# Local invocation against ./config/ for testing leaves these behind.
+config/plugins/csharp-lsp/
+config/plugins/commit-commands/
+config/plugins/feature-dev/
+config/plugins/claude-mem/
+config/skills/playwright-skill/

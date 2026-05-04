@@ -129,6 +129,7 @@ RUN npm i -g \
     serve nodemon concurrently \
     dotenv-cli \
     lighthouse \
+    claude-powerline \
     @google/gemini-cli \
     @openai/codex
 
@@ -194,6 +195,21 @@ COPY scripts/notify.py     /usr/local/bin/notify.py
 # (settings.json + CLAUDE.md remain sentinel-gated first-boot-only seeds —
 # feature 001 contract preserved). See specs/005-config-bundling/.
 COPY config/ /usr/local/share/kroclaude/config/
+
+# ---------- Bundled third-party plugins/skills (curated cart) ----------
+# Fetched at build time from upstream repos into the same /config/
+# bundle tree, so they ride the existing entrypoint reflection into
+# ~/.claude/{plugins,skills}/ on every boot. Refs are pinned in the
+# script and overridable per-item via build args (e.g.
+# `--build-arg CLAUDE_MEM_REF=<sha>`). See scripts/fetch-plugins.sh.
+ARG ANTHROPIC_OFFICIAL_REF=main
+ARG CLAUDE_MEM_REF=main
+ARG PLAYWRIGHT_SKILL_REF=main
+RUN --mount=type=bind,source=scripts/fetch-plugins.sh,target=/tmp/fetch-plugins.sh \
+    ANTHROPIC_OFFICIAL_REF="$ANTHROPIC_OFFICIAL_REF" \
+    CLAUDE_MEM_REF="$CLAUDE_MEM_REF" \
+    PLAYWRIGHT_SKILL_REF="$PLAYWRIGHT_SKILL_REF" \
+    bash /tmp/fetch-plugins.sh /usr/local/share/kroclaude/config
 
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py && \
     install -d -o claude -g claude /home/claude/.claude
