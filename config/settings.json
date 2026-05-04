@@ -6,6 +6,10 @@
     "DISABLE_AUTOUPDATER": "1"
   },
   "model": "sonnet",
+  "statusLine": {
+    "type": "command",
+    "command": "claude-powerline"
+  },
   "hooks": {
     "Stop": [
       {
