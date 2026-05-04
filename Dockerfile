@@ -6,6 +6,7 @@ LABEL org.opencontainers.image.description="Claude Code shell environment"
 
 # ---------- Build args ----------
 ARG S6_OVERLAY_VERSION=3.2.0.2
+ARG NATS_CLI_VERSION=0.4.0
 ARG TARGETARCH
 
 # ---------- Environment ----------
@@ -78,6 +79,19 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
     apt-get update && apt-get install -y --no-install-recommends \
     docker-ce-cli docker-buildx-plugin docker-compose-plugin && \
     rm -rf /var/lib/apt/lists/*
+
+# ---------- NATS CLI ----------
+# https://github.com/nats-io/natscli — admin/diagnostic CLI for NATS
+# servers, JetStream, KV / object stores. No apt feed; ships per-arch zip
+# archives that extract to nats-<ver>-linux-<arch>/nats. Multi-arch via
+# TARGETARCH (matches the s6-overlay pattern). The binary lands in
+# /usr/local/bin so it's on PATH for interactive shells and entrypoint.
+RUN NATS_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "amd64";; esac) && \
+    curl -fsSL -o /tmp/nats.zip \
+    "https://github.com/nats-io/natscli/releases/download/v${NATS_CLI_VERSION}/nats-${NATS_CLI_VERSION}-linux-${NATS_ARCH}.zip" && \
+    unzip -j /tmp/nats.zip "nats-${NATS_CLI_VERSION}-linux-${NATS_ARCH}/nats" -d /usr/local/bin && \
+    chmod +x /usr/local/bin/nats && \
+    rm /tmp/nats.zip
 
 # ---------- bat / fd symlinks (Debian names them batcat / fdfind) + locale ----------
 RUN ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null || true && \
