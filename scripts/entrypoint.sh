@@ -23,8 +23,9 @@ SENTINEL="$CONFIG_DIR/.kroclaude-bootstrapped"
 if [ ! -f "$SENTINEL" ]; then
     install -d -o claude -g claude "$CONFIG_DIR"
 
-    cp "$SOURCE_DIR/settings.json" "$CONFIG_DIR/settings.json"
-    cp "$SOURCE_DIR/CLAUDE.md"     "$CONFIG_DIR/CLAUDE.md"
+    cp "$SOURCE_DIR/settings.json"          "$CONFIG_DIR/settings.json"
+    cp "$SOURCE_DIR/CLAUDE.md"              "$CONFIG_DIR/CLAUDE.md"
+    cp "$SOURCE_DIR/claude-powerline.json"  "$CONFIG_DIR/claude-powerline.json"
 
     runuser -u claude -- git config --global safe.directory /workspace
     runuser -u claude -- git config --global user.name  "${GIT_USER_NAME:-KroClaude User}"
