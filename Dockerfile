@@ -188,6 +188,7 @@ RUN chmod +x /etc/s6-overlay/s6-rc.d/sshd/run && \
 # ---------- Helper scripts and default configs ----------
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/notify.py     /usr/local/bin/notify.py
+COPY scripts/rm-guard.sh   /usr/local/bin/rm-guard.sh
 # ---------- Bundled Claude Code customization (feature 005-config-bundling) ----------
 # Single read-only image-time copy of the entire /config/ tree, replacing
 # the granular per-file COPYs and the legacy /skills/ COPY. The entrypoint
@@ -211,7 +212,7 @@ RUN --mount=type=bind,source=scripts/fetch-plugins.sh,target=/tmp/fetch-plugins.
     PLAYWRIGHT_SKILL_REF="$PLAYWRIGHT_SKILL_REF" \
     bash /tmp/fetch-plugins.sh /usr/local/share/kroclaude/config
 
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py && \
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py /usr/local/bin/rm-guard.sh && \
     install -d -o claude -g claude /home/claude/.claude
 
 # ---------- Bash history persistence (research R9) ----------

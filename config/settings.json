@@ -1,16 +1,39 @@
 {
   "permissions": {
-    "defaultMode": "acceptEdits"
+    "defaultMode": "bypassPermissions"
   },
   "env": {
     "DISABLE_AUTOUPDATER": "1"
   },
-  "model": "sonnet",
   "statusLine": {
     "type": "command",
     "command": "claude-powerline"
   },
+  "model": "opus",
+  "effortLevel": "xhigh",
+  "alwaysThinkingEnabled": true,
+  "useAutoModeDuringPlan": true,
+  "showClearContextOnPlanAccept": true,
+  "awaySummaryEnabled": true,
+  "spinnerTipsEnabled": true,
+  "viewMode": "focus",
+  "autoScrollEnabled": true,
+  "attribution": {
+    "commit": "😎+🤖 Generated with AI (KroClaude)",
+    "pr": "😎+🤖 Generated with AI (KroClaude)"
+  },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/rm-guard.sh"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

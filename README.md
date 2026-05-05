@@ -105,6 +105,27 @@ into the persistent volume **once on first boot** (sentinel-gated).
 Edits to those files in the repo affect new deployments only — to
 re-seed an existing container, wipe the `kroclaude-config` volume.
 
+## Default behaviour
+
+The image ships [`config/settings.json`](config/settings.json) tuned
+for an isolated, ephemeral container:
+
+- **Permission mode**: `bypassPermissions`. No per-tool prompts;
+  only `rm -rf /` and `rm -rf ~` still ask. Fine for a throwaway
+  container, **not** for one with mounted host paths.
+- **Model & reasoning**: `opus` with `effortLevel: xhigh`,
+  `alwaysThinkingEnabled: true`, `useAutoModeDuringPlan: true`.
+- **rm-guard safety belt**: a bundled PreToolUse hook
+  ([`scripts/rm-guard.sh`](scripts/rm-guard.sh)) denies recursive
+  deletes whose target resolves into `/workspace` or `~/.claude` —
+  the only paths that survive container recreation.
+- **Commit / PR attribution**: the `attribution` block sets the
+  footer appended to git commits and PRs. Edit it in
+  `config/settings.json` to change.
+
+Change anything you don't want and rebuild; the seed only takes
+effect the first time the `kroclaude-config` volume is empty.
+
 ## Maintenance
 
 - **Update Claude Code or any tool** → `docker compose build && docker compose up -d`. Volumes survive.
