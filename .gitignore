@@ -35,8 +35,8 @@ desktop.ini
 
 # Fetched at docker build by scripts/fetch-plugins.sh — do not commit.
 # Local invocation against ./config/ for testing leaves these behind.
-config/plugins/csharp-lsp/
-config/plugins/commit-commands/
-config/plugins/feature-dev/
-config/plugins/claude-mem/
+config/marketplace/csharp-lsp/
+config/marketplace/commit-commands/
+config/marketplace/feature-dev/
+config/marketplace/claude-mem/
 config/skills/playwright-skill/

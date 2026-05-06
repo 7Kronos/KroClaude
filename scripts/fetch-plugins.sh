@@ -97,20 +97,26 @@ fetch_subpath() {
 }
 
 # ---------- Targets ----------
-PLUGINS_DIR="$TARGET_ROOT/plugins"
+# Plugins land under a single "marketplace" directory whose
+# `.claude-plugin/marketplace.json` (checked in at config/marketplace/)
+# turns this whole tree into a Claude Code local marketplace. The
+# entrypoint reflects this dir wholesale into
+# ~/.claude/kroclaude-marketplace/ and the plugin-defaults.json merge
+# wires it up via extraKnownMarketplaces + enabledPlugins.
+MARKETPLACE_DIR="$TARGET_ROOT/marketplace"
 SKILLS_DIR="$TARGET_ROOT/skills"
-mkdir -p "$PLUGINS_DIR" "$SKILLS_DIR"
+mkdir -p "$MARKETPLACE_DIR" "$SKILLS_DIR"
 
 # ---------- Anthropic-official plugins (sparse checkout) ----------
 fetch_subpath "$ANTHROPIC_OFFICIAL_URL" "$ANTHROPIC_OFFICIAL_REF" \
-    "plugins/csharp-lsp"       "$PLUGINS_DIR/csharp-lsp"
+    "plugins/csharp-lsp"       "$MARKETPLACE_DIR/csharp-lsp"
 fetch_subpath "$ANTHROPIC_OFFICIAL_URL" "$ANTHROPIC_OFFICIAL_REF" \
-    "plugins/commit-commands"  "$PLUGINS_DIR/commit-commands"
+    "plugins/commit-commands"  "$MARKETPLACE_DIR/commit-commands"
 fetch_subpath "$ANTHROPIC_OFFICIAL_URL" "$ANTHROPIC_OFFICIAL_REF" \
-    "plugins/feature-dev"      "$PLUGINS_DIR/feature-dev"
+    "plugins/feature-dev"      "$MARKETPLACE_DIR/feature-dev"
 
 # ---------- Community plugin ----------
-fetch_full "$CLAUDE_MEM_URL" "$CLAUDE_MEM_REF" "$PLUGINS_DIR/claude-mem"
+fetch_full "$CLAUDE_MEM_URL" "$CLAUDE_MEM_REF" "$MARKETPLACE_DIR/claude-mem"
 
 # ---------- Community skill ----------
 fetch_full "$PLAYWRIGHT_SKILL_URL" "$PLAYWRIGHT_SKILL_REF" \

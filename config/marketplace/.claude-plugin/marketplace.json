@@ -1,0 +1,32 @@
+{
+  "name": "kroclaude-bundle",
+  "owner": {
+    "name": "KroClaude"
+  },
+  "metadata": {
+    "description": "Curated third-party plugins bundled into the KroClaude container image. Plugin trees are fetched at docker build time by scripts/fetch-plugins.sh and reflected from the read-only image bundle into ~/.claude/kroclaude-marketplace/ on every container boot.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "csharp-lsp",
+      "source": "./csharp-lsp",
+      "description": "C# Language Server (csharp-ls / Roslyn) — jump-to-def, find-references, live diagnostics."
+    },
+    {
+      "name": "commit-commands",
+      "source": "./commit-commands",
+      "description": "/commit, /commit-push-pr, /clean_gone — automated git workflow slash commands."
+    },
+    {
+      "name": "feature-dev",
+      "source": "./feature-dev",
+      "description": "7-phase feature workflow with code-explorer / code-architect / code-reviewer subagents."
+    },
+    {
+      "name": "claude-mem",
+      "source": "./claude-mem",
+      "description": "Cross-session memory: capture, compress, and re-inject relevant context."
+    }
+  ]
+}
