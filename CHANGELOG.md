@@ -8,6 +8,36 @@ Image tag versions are independent of the project constitution version.
 
 ## [Unreleased]
 
+### Changed
+
+- **Deployment-process simplification pass**: entrypoint, Dockerfile,
+  fetch-plugins, smoke tests, and CI all reworked for maintainability.
+  No user-facing behavior change; reflection / merge / first-boot
+  contracts preserved.
+  - Entrypoint: a single final `chown -R "$CLAUDE_HOME"` sweep replaces
+    ~17 scattered per-block chowns; `/workspace` removed from the sweep
+    (never written-to during build). `reflect_dir_of_dirs` +
+    `reflect_dir_of_files` collapsed into one `reflect_dir` helper;
+    new `reflect_tree` and `merge_one` helpers absorb the inline
+    marketplace + `plugin-defaults.json` activation block. The orphan
+    plugin cleanup list is now derived from `marketplace.json` instead
+    of being hard-coded. The codex/gemini config heredocs moved to
+    bundled files under `config/per-cli/`. ssh-keygen, the first-boot
+    `cp` triplet, and the dotnet channel installs are all loops now.
+    The indirect `${!filter_var}` ref in `merge_fragments` is gone.
+  - fetch-plugins: rewritten to support SHA pins (was branch/tag-only
+    despite the docs); the three Anthropic-monorepo sparse clones are
+    folded into ONE shallow fetch with multi-subpath sparse-checkout.
+  - Dockerfile: `S6_OVERLAY_VERSION` and `NATS_CLI_VERSION` no longer
+    pinned by default — both fetch the latest release at build time
+    (`--build-arg <NAME>=<version>` still overrides for reproducibility).
+    The S6 `ADD` directive is now a `curl` inside the same RUN block
+    so it can see the runtime-resolved version.
+  - CI: the `bundled-skills-budget` job now checks `config/skills/`
+    (was silently a no-op against the pre-feature-005 path `skills/`).
+  - Smoke tests: shared scaffolding extracted to `tests/smoke/lib.sh`
+    (`log`, `fail`, `wait_healthy`, `cleanup_compose`, common env).
+
 ### Added
 
 - **VS Code Remote-SSH persistence**: new `kroclaude-vscode` named

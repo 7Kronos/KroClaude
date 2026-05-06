@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "notify",
+            "type": "command",
+            "command": "/usr/local/bin/notify.py stop",
+            "timeout": 30000
+          }
+        ]
+      }
+    ]
+  }
+}

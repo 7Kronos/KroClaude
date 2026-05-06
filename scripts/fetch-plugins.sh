@@ -53,46 +53,116 @@ fetch_full() {
 
     log "fetch $name @ $ref from $url"
     rm -rf "$dest"
-    if ! git clone --quiet --depth 1 --branch "$ref" "$url" "$dest"; then
-        warn "$name: git clone failed — skipping"
+    mkdir -p "$dest"
+    if ! git -C "$dest" init --quiet; then
+        warn "$name: git init failed — skipping"
+        rm -rf "$dest"
+        return 0
+    fi
+    if ! git -C "$dest" remote add origin "$url"; then
+        warn "$name: git remote add failed — skipping"
+        rm -rf "$dest"
+        return 0
+    fi
+    if ! git -C "$dest" fetch --quiet --depth 1 origin "$ref"; then
+        warn "$name: git fetch failed — skipping"
+        rm -rf "$dest"
+        return 0
+    fi
+    if ! git -C "$dest" checkout --quiet FETCH_HEAD; then
+        warn "$name: git checkout failed — skipping"
         rm -rf "$dest"
         return 0
     fi
     rm -rf "$dest/.git"
 }
 
-# fetch_subpath <url> <ref> <subpath> <dest_dir>
-#   Sparse-clone <url>, materialize only <subpath>, then move that
-#   subpath's contents to <dest_dir>. Used for the Anthropic monorepo.
-fetch_subpath() {
-    local url="$1" ref="$2" subpath="$3" dest="$4"
-    local name; name="$(basename "$dest")"
+# fetch_subpaths <url> <ref> <subpath:dest> [<subpath:dest> ...]
+#   Sparse-clone <url> ONCE, materialize all listed subpaths in a single
+#   working tree, then move each into its dest. Used for the Anthropic
+#   monorepo where we want multiple plugins from one repo without
+#   repeating init+fetch+checkout per plugin.
+#   Per-pair skip-if-populated mirrors the old fetch_subpath behaviour;
+#   if every dest is already populated, the network fetch is skipped.
+fetch_subpaths() {
+    local url="$1" ref="$2"; shift 2
+    local pairs=("$@")
 
-    if [ -e "$dest" ] && [ "$(ls -A "$dest" 2>/dev/null | grep -v '^\.gitkeep$')" ]; then
-        log "skip $name (destination already populated)"
+    # Pre-pass: if every destination is already populated, skip entirely.
+    local pair subpath dest name any_pending=0
+    for pair in "${pairs[@]}"; do
+        dest="${pair#*:}"
+        name="$(basename "$dest")"
+        if [ -e "$dest" ] && [ "$(ls -A "$dest" 2>/dev/null | grep -v '^\.gitkeep$')" ]; then
+            log "skip $name (destination already populated)"
+        else
+            any_pending=1
+        fi
+    done
+    if [ "$any_pending" -eq 0 ]; then
         return 0
     fi
 
-    log "fetch $name @ $ref from $url ($subpath)"
+    # Log a fetch line per pending subpath, matching the old format.
+    for pair in "${pairs[@]}"; do
+        subpath="${pair%%:*}"
+        dest="${pair#*:}"
+        name="$(basename "$dest")"
+        if [ -e "$dest" ] && [ "$(ls -A "$dest" 2>/dev/null | grep -v '^\.gitkeep$')" ]; then
+            continue
+        fi
+        log "fetch $name @ $ref from $url ($subpath)"
+    done
+
     local tmp; tmp="$(mktemp -d)"
-    if ! git clone --quiet --depth 1 --filter=blob:none --sparse \
-            --branch "$ref" "$url" "$tmp"; then
-        warn "$name: git clone failed — skipping"
-        rm -rf "$tmp"
-        return 0
+    if ! git -C "$tmp" init --quiet; then
+        warn "monorepo git init failed — skipping all subpaths"
+        rm -rf "$tmp"; return 0
     fi
-    if ! git -C "$tmp" sparse-checkout set --no-cone "$subpath" >/dev/null; then
-        warn "$name: sparse-checkout failed — skipping"
-        rm -rf "$tmp"
-        return 0
+    if ! git -C "$tmp" remote add origin "$url"; then
+        warn "monorepo git remote add failed — skipping all subpaths"
+        rm -rf "$tmp"; return 0
     fi
-    if [ ! -d "$tmp/$subpath" ]; then
-        warn "$name: subpath '$subpath' not found in $url@$ref — skipping"
-        rm -rf "$tmp"
-        return 0
+    if ! git -C "$tmp" config core.sparseCheckout true; then
+        warn "monorepo git config sparseCheckout failed — skipping all subpaths"
+        rm -rf "$tmp"; return 0
     fi
-    rm -rf "$dest"
-    mv "$tmp/$subpath" "$dest"
+    if ! git -C "$tmp" sparse-checkout init --no-cone >/dev/null; then
+        warn "monorepo sparse-checkout init failed — skipping all subpaths"
+        rm -rf "$tmp"; return 0
+    fi
+    for pair in "${pairs[@]}"; do
+        subpath="${pair%%:*}"
+        if ! git -C "$tmp" sparse-checkout add --no-cone "$subpath" >/dev/null; then
+            warn "monorepo sparse-checkout add '$subpath' failed — skipping all subpaths"
+            rm -rf "$tmp"; return 0
+        fi
+    done
+    if ! git -C "$tmp" fetch --quiet --depth 1 --filter=blob:none origin "$ref"; then
+        warn "monorepo git fetch failed — skipping all subpaths"
+        rm -rf "$tmp"; return 0
+    fi
+    if ! git -C "$tmp" checkout --quiet FETCH_HEAD; then
+        warn "monorepo git checkout failed — skipping all subpaths"
+        rm -rf "$tmp"; return 0
+    fi
+
+    for pair in "${pairs[@]}"; do
+        subpath="${pair%%:*}"
+        dest="${pair#*:}"
+        name="$(basename "$dest")"
+        if [ -e "$dest" ] && [ "$(ls -A "$dest" 2>/dev/null | grep -v '^\.gitkeep$')" ]; then
+            continue
+        fi
+        if [ ! -d "$tmp/$subpath" ]; then
+            warn "$name: subpath '$subpath' not found in $url@$ref — skipping"
+            continue
+        fi
+        rm -rf "$dest"
+        if ! mv "$tmp/$subpath" "$dest"; then
+            warn "$name: mv failed — skipping"
+        fi
+    done
     rm -rf "$tmp"
 }
 
@@ -107,13 +177,11 @@ MARKETPLACE_DIR="$TARGET_ROOT/marketplace"
 SKILLS_DIR="$TARGET_ROOT/skills"
 mkdir -p "$MARKETPLACE_DIR" "$SKILLS_DIR"
 
-# ---------- Anthropic-official plugins (sparse checkout) ----------
-fetch_subpath "$ANTHROPIC_OFFICIAL_URL" "$ANTHROPIC_OFFICIAL_REF" \
-    "plugins/csharp-lsp"       "$MARKETPLACE_DIR/csharp-lsp"
-fetch_subpath "$ANTHROPIC_OFFICIAL_URL" "$ANTHROPIC_OFFICIAL_REF" \
-    "plugins/commit-commands"  "$MARKETPLACE_DIR/commit-commands"
-fetch_subpath "$ANTHROPIC_OFFICIAL_URL" "$ANTHROPIC_OFFICIAL_REF" \
-    "plugins/feature-dev"      "$MARKETPLACE_DIR/feature-dev"
+# ---------- Anthropic-official plugins (single sparse checkout) ----------
+fetch_subpaths "$ANTHROPIC_OFFICIAL_URL" "$ANTHROPIC_OFFICIAL_REF" \
+    "plugins/csharp-lsp:$MARKETPLACE_DIR/csharp-lsp" \
+    "plugins/commit-commands:$MARKETPLACE_DIR/commit-commands" \
+    "plugins/feature-dev:$MARKETPLACE_DIR/feature-dev"
 
 # ---------- Community plugin ----------
 fetch_full "$CLAUDE_MEM_URL" "$CLAUDE_MEM_REF" "$MARKETPLACE_DIR/claude-mem"

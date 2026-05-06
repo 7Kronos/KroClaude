@@ -5,8 +5,11 @@ LABEL org.opencontainers.image.source=https://github.com/7Kronos/KroClaude
 LABEL org.opencontainers.image.description="Claude Code shell environment"
 
 # ---------- Build args ----------
-ARG S6_OVERLAY_VERSION=3.2.0.2
-ARG NATS_CLI_VERSION=0.4.0
+# Versions default to empty: each install layer fetches the latest
+# upstream release at build time. Override per-build for reproducibility,
+# e.g. `--build-arg S6_OVERLAY_VERSION=3.2.0.2`.
+ARG S6_OVERLAY_VERSION=
+ARG NATS_CLI_VERSION=
 ARG TARGETARCH
 
 # ---------- Environment ----------
@@ -20,11 +23,23 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # ---------- s6-overlay v3 (multi-arch) ----------
+# Defaults to the latest GitHub release at build time. Pin via
+# `--build-arg S6_OVERLAY_VERSION=<x.y.z.w>` for reproducible builds.
+# Both tarballs (noarch + arch-specific) are fetched via curl in this
+# RUN layer so they share one shell-resolved version variable —
+# Dockerfile `ADD` runs at parse time and cannot see RUN-computed vars.
+# `jq` is not yet installed at this layer (apt installs it later), so we
+# parse the GitHub API JSON with `grep -oP`.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp/
-RUN S6_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64";; esac) && \
+RUN if [ -z "$S6_OVERLAY_VERSION" ]; then \
+        S6_OVERLAY_VERSION=$(curl -fsSL https://api.github.com/repos/just-containers/s6-overlay/releases/latest \
+            | grep -oP '"tag_name":\s*"v\K[^"]+'); \
+    fi && \
+    S6_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64";; esac) && \
+    curl -fsSL -o /tmp/s6-overlay-noarch.tar.xz \
+    "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" && \
     curl -fsSL -o /tmp/s6-overlay-arch.tar.xz \
     "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" && \
     tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
@@ -86,7 +101,17 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
 # archives that extract to nats-<ver>-linux-<arch>/nats. Multi-arch via
 # TARGETARCH (matches the s6-overlay pattern). The binary lands in
 # /usr/local/bin so it's on PATH for interactive shells and entrypoint.
-RUN NATS_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "amd64";; esac) && \
+# Defaults to the latest GitHub release at build time; pin via
+# `--build-arg NATS_CLI_VERSION=<x.y.z>` for reproducible builds. `jq` is
+# available at this layer (installed in the system-packages layer above)
+# so we parse the GitHub API JSON with it. The same shell-resolved
+# version variable is used for both the download URL and the unzip
+# subpath (`nats-<ver>-linux-<arch>/nats`).
+RUN if [ -z "$NATS_CLI_VERSION" ]; then \
+        NATS_CLI_VERSION=$(curl -fsSL https://api.github.com/repos/nats-io/natscli/releases/latest \
+            | jq -r .tag_name | tr -d v); \
+    fi && \
+    NATS_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "amd64";; esac) && \
     curl -fsSL -o /tmp/nats.zip \
     "https://github.com/nats-io/natscli/releases/download/v${NATS_CLI_VERSION}/nats-${NATS_CLI_VERSION}-linux-${NATS_ARCH}.zip" && \
     unzip -j /tmp/nats.zip "nats-${NATS_CLI_VERSION}-linux-${NATS_ARCH}/nats" -d /usr/local/bin && \
@@ -152,9 +177,9 @@ ENV DOTNET_ROOT=/usr/share/dotnet \
     DOTNET_NOLOGO=1
 RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
     chmod +x /tmp/dotnet-install.sh && \
-    /tmp/dotnet-install.sh --channel 9.0  --install-dir "$DOTNET_ROOT" --no-path && \
-    /tmp/dotnet-install.sh --channel 10.0 --install-dir "$DOTNET_ROOT" --no-path && \
-    /tmp/dotnet-install.sh --channel 11.0 --quality preview --install-dir "$DOTNET_ROOT" --no-path && \
+    for ch in "9.0" "10.0" "11.0 --quality preview"; do \
+        /tmp/dotnet-install.sh --channel $ch --install-dir "$DOTNET_ROOT" --no-path || exit 1; \
+    done && \
     rm /tmp/dotnet-install.sh && \
     ln -sf "$DOTNET_ROOT/dotnet" /usr/local/bin/dotnet
 
@@ -200,9 +225,10 @@ COPY config/ /usr/local/share/kroclaude/config/
 # ---------- Bundled third-party plugins/skills (curated cart) ----------
 # Fetched at build time from upstream repos into the same /config/
 # bundle tree, so they ride the existing entrypoint reflection into
-# ~/.claude/{plugins,skills}/ on every boot. Refs are pinned in the
-# script and overridable per-item via build args (e.g.
-# `--build-arg CLAUDE_MEM_REF=<sha>`). See scripts/fetch-plugins.sh.
+# ~/.claude/{plugins,skills}/ on every boot. Refs default to `main`,
+# i.e. the latest commit on each upstream's default branch is fetched
+# every rebuild. Override per-item via build args for reproducibility
+# (e.g. `--build-arg CLAUDE_MEM_REF=<sha>`). See scripts/fetch-plugins.sh.
 ARG ANTHROPIC_OFFICIAL_REF=main
 ARG CLAUDE_MEM_REF=main
 ARG PLAYWRIGHT_SKILL_REF=main

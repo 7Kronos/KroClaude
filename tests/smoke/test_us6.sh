@@ -11,28 +11,15 @@
 # unaffected.
 set -euo pipefail
 
-: "${COMPOSE:=docker compose}"
-SVC=kroclaude
-export COMPOSE_PROJECT_NAME=kroclaude
+LOG_TAG=us6
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
 
 REPO_ROOT="$(pwd)"
 CONFIG_DIR="$REPO_ROOT/config"
 FIXTURES_DIR="$REPO_ROOT/tests/smoke/fixtures/005"
 TMP_DIR=$(mktemp -d)
 CONFIG_BACKUP="$TMP_DIR/config-backup"
-
-log()  { printf '\n[us6] %s\n' "$*"; }
-fail() { printf '[us6] FAIL: %s\n' "$*" >&2; $COMPOSE logs --no-color $SVC || true; exit 1; }
-
-wait_healthy() {
-    local svc=${1:-$SVC}
-    for i in $(seq 1 60); do
-        s=$(docker inspect --format '{{.State.Health.Status}}' "$svc" 2>/dev/null || echo starting)
-        [ "$s" = "healthy" ] && return 0
-        sleep 1
-    done
-    fail "container $svc did not reach healthy in 60s"
-}
 
 # Copy a fixture into the live /config/ tree. For dir-of-dirs types
 # (skills, agents, plugins) <name> is a directory; for dir-of-files
@@ -55,7 +42,7 @@ place_fixture() {
 }
 
 cleanup() {
-    $COMPOSE down --remove-orphans -v >/dev/null 2>&1 || true
+    cleanup_compose
     # Restore /config/ to its pre-test state.
     if [ -d "$CONFIG_BACKUP" ]; then
         rm -rf "$CONFIG_DIR"

@@ -10,10 +10,10 @@
 #   - workspace-only wipe leaves config volume intact (US2 acc 2)
 set -euo pipefail
 
-: "${COMPOSE:=docker compose}"
-SVC=kroclaude
-# Pin project name so volume names are deterministic regardless of cwd basename.
-export COMPOSE_PROJECT_NAME=kroclaude
+LOG_TAG=us2
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
+
 WS_VOL=kroclaude_kroclaude-workspace
 
 # Skill-bundling fixtures (feature 002, repathed under feature 005's
@@ -25,22 +25,11 @@ USER_SKILL_NAME=__smoke_user_skill
 FIXTURE_V1=$'# smoke-fixture-skill\nVERSION=1\n'
 FIXTURE_V2=$'# smoke-fixture-skill\nVERSION=2\n'
 
-log()  { printf '\n[us2] %s\n' "$*"; }
-fail() { printf '[us2] FAIL: %s\n' "$*" >&2; $COMPOSE logs --no-color $SVC || true; exit 1; }
 in_ctn()    { docker exec "$SVC" bash -c "$1"; }
 as_claude() { docker exec --user claude "$SVC" bash -c "$1"; }
 
-wait_healthy() {
-    for i in $(seq 1 60); do
-        s=$(docker inspect --format '{{.State.Health.Status}}' "$SVC" 2>/dev/null || echo starting)
-        [ "$s" = "healthy" ] && return 0
-        sleep 1
-    done
-    fail "container did not reach healthy in 60s"
-}
-
 cleanup() {
-    $COMPOSE down --remove-orphans -v >/dev/null 2>&1 || true
+    cleanup_compose
     # Restore the fixture skill if the orphan scenario moved it aside.
     if [ -d "$FIXTURE_BACKUP" ]; then
         rm -rf "$FIXTURE_SRC"

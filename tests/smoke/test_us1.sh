@@ -10,35 +10,23 @@
 #   - headless Chromium can fetch example.com (FR-003b end-to-end)
 set -euo pipefail
 
-: "${COMPOSE:=docker compose}"
-SVC=kroclaude
-
-log()  { printf '\n[us1] %s\n' "$*"; }
-fail() { printf '[us1] FAIL: %s\n' "$*" >&2; $COMPOSE logs --no-color $SVC || true; $COMPOSE ps || true; exit 1; }
+LOG_TAG=us1
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
 
 in_ctn() { docker exec "$SVC" bash -c "$1"; }
 as_claude() { docker exec --user claude "$SVC" bash -c "$1"; }
 
-cleanup() { $COMPOSE down >/dev/null 2>&1 || true; }
 # Volumes are deliberately preserved — US2 reuses them. Caller can `down -v`.
-
+# This is why we DON'T use cleanup_compose here (it removes volumes).
+cleanup() { $COMPOSE down >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 log "Building image and bringing stack up"
 $COMPOSE up -d --build
 
 log "Waiting for healthy status (max 60s)"
-for i in $(seq 1 60); do
-    status=$(docker inspect --format '{{.State.Health.Status}}' "$SVC" 2>/dev/null || echo "starting")
-    if [ "$status" = "healthy" ]; then
-        log "healthy after ${i}s"
-        break
-    fi
-    sleep 1
-    if [ "$i" -eq 60 ]; then
-        fail "container did not reach healthy status within 60s (last status: $status)"
-    fi
-done
+wait_healthy
 
 log "Asserting claude CLI is present and runnable (as claude user)"
 as_claude 'claude --version' || fail "claude --version exited non-zero"

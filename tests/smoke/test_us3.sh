@@ -10,23 +10,22 @@
 #   - Codex / Gemini hook files reference notify.py with the right event
 set -euo pipefail
 
-: "${COMPOSE:=docker compose}"
-SVC=kroclaude
+LOG_TAG=us3
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
 
-log()  { printf '\n[us3] %s\n' "$*"; }
-fail() { printf '[us3] FAIL: %s\n' "$*" >&2; exit 1; }
+# US3 piggy-backs on a stack already brought up by US1, so it MUST NOT
+# dump compose logs on every failure (that would hide the actual
+# assertion). Override the shared fail() with the quieter form.
+fail() { printf '[%s] FAIL: %s\n' "$LOG_TAG" "$*" >&2; exit 1; }
+
 in_ctn() { docker exec "$SVC" bash -c "$1"; }
 
 # Bring stack up if not already running.
 if ! docker inspect --format '{{.State.Health.Status}}' "$SVC" >/dev/null 2>&1; then
     log "Stack not running — bringing up"
     $COMPOSE up -d
-    for i in $(seq 1 60); do
-        s=$(docker inspect --format '{{.State.Health.Status}}' "$SVC" 2>/dev/null || echo starting)
-        [ "$s" = "healthy" ] && break
-        sleep 1
-        [ "$i" -eq 60 ] && fail "container not healthy in 60s"
-    done
+    wait_healthy
 fi
 
 log "notify.py exists and is executable"
