@@ -23,17 +23,16 @@ SENTINEL="$CONFIG_DIR/.kroclaude-bootstrapped"
 if [ ! -f "$SENTINEL" ]; then
     install -d -o claude -g claude "$CONFIG_DIR"
 
-    cp "$SOURCE_DIR/settings.json"          "$CONFIG_DIR/settings.json"
-    cp "$SOURCE_DIR/CLAUDE.md"              "$CONFIG_DIR/CLAUDE.md"
-    cp "$SOURCE_DIR/claude-powerline.json"  "$CONFIG_DIR/claude-powerline.json"
+    # First-boot-only seeds: top-level config files copied once, sentinel-gated.
+    for f in settings.json CLAUDE.md claude-powerline.json; do
+        cp "$SOURCE_DIR/$f" "$CONFIG_DIR/$f"
+    done
 
     runuser -u claude -- git config --global safe.directory /workspace
     runuser -u claude -- git config --global user.name  "${GIT_USER_NAME:-KroClaude User}"
     runuser -u claude -- git config --global user.email "${GIT_USER_EMAIL:-noreply@kroclaude.local}"
 
-    chown -R claude:claude "$CONFIG_DIR"
     touch "$SENTINEL"
-    chown claude:claude "$SENTINEL"
     echo "[entrypoint] First-boot seed complete."
 fi
 
@@ -46,11 +45,9 @@ fi
 if [ ! -L "$CLAUDE_HOME/.claude.json" ] || \
    [ "$(readlink "$CLAUDE_HOME/.claude.json" 2>/dev/null)" != "$CONFIG_DIR/.claude.json" ]; then
     ln -sfn "$CONFIG_DIR/.claude.json" "$CLAUDE_HOME/.claude.json"
-    chown -h claude:claude "$CLAUDE_HOME/.claude.json"
 fi
 if [ ! -f "$CONFIG_DIR/.claude.json" ]; then
     echo '{"hasCompletedOnboarding":true,"installMethod":"native"}' > "$CONFIG_DIR/.claude.json"
-    chown claude:claude "$CONFIG_DIR/.claude.json"
 fi
 
 # ---------- Per-CLI dotdir seeding (idempotent, every boot) ----------
@@ -60,62 +57,16 @@ fi
 # user can add these volumes to an existing deployment where the
 # sentinel already exists — the volumes would then start empty and
 # never be seeded. Each write is "create-if-missing" so user-edited
-# files are never overwritten.
+# files are never overwritten. Source files live under
+# $SOURCE_DIR/per-cli/<cli>/<file>; mirror that into ~/.<cli>/<file>.
 install -d -o claude -g claude "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
-
-if [ ! -f "$CLAUDE_HOME/.codex/config.toml" ]; then
-    cat > "$CLAUDE_HOME/.codex/config.toml" <<'TOML'
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
-
-[features]
-codex_hooks = true
-TOML
-fi
-
-if [ ! -f "$CLAUDE_HOME/.codex/hooks.json" ]; then
-    cat > "$CLAUDE_HOME/.codex/hooks.json" <<'JSON'
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/usr/local/bin/notify.py stop",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
-  }
-}
-JSON
-fi
-
-if [ ! -f "$CLAUDE_HOME/.gemini/settings.json" ]; then
-    cat > "$CLAUDE_HOME/.gemini/settings.json" <<'JSON'
-{
-  "hooks": {
-    "SessionEnd": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "name": "notify",
-            "type": "command",
-            "command": "/usr/local/bin/notify.py stop",
-            "timeout": 30000
-          }
-        ]
-      }
-    ]
-  }
-}
-JSON
-fi
-
-chown -R claude:claude "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
+for src in "$SOURCE_DIR"/per-cli/codex/* "$SOURCE_DIR"/per-cli/gemini/*; do
+    [ -f "$src" ] || continue
+    cli=$(basename "$(dirname "$src")")        # codex | gemini
+    fname=$(basename "$src")
+    dest="$CLAUDE_HOME/.$cli/$fname"
+    [ -f "$dest" ] || cp "$src" "$dest"
+done
 
 # ---------- ~/.config/gh ownership (idempotent, every boot) ----------
 # Docker creates the named-volume mount target as root:root when the
@@ -124,27 +75,32 @@ chown -R claude:claude "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
 # other CLIs the user installs later can drop dotdirs there. Don't
 # recurse into ~/.config/gh on later boots: anything inside is
 # already claude-owned (gh wrote it).
-install -d "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
-chown claude:claude "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
+install -d -o claude -g claude "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
 
 # ---------- ~/.vscode-server ownership (idempotent, every boot) ----------
 # Same root:root-on-empty-volume issue as ~/.config/gh above. VS Code
 # Remote-SSH connects as claude and writes its server install +
 # extensions here; without the chown, the first connect after a wipe
 # fails silently and VS Code falls back to re-downloading every time.
-install -d "$CLAUDE_HOME/.vscode-server"
-chown claude:claude "$CLAUDE_HOME/.vscode-server"
+install -d -o claude -g claude "$CLAUDE_HOME/.vscode-server"
 
 # ============================================================================
 # Bundled customization reflection (feature 005-config-bundling)
 # ----------------------------------------------------------------------------
 # Reflects each per-type subdirectory of $SOURCE_DIR/<type>/ into
-# ~/.claude/<type>/ on EVERY boot. Three helper functions cover the three
-# reflection patterns:
+# ~/.claude/<type>/ on EVERY boot. Five helper functions cover three
+# reflection patterns and two merge patterns:
 #
-#   reflect_dir_of_dirs   — skills, agents, plugins (per-item is a directory)
-#   reflect_dir_of_files  — commands, output-styles (per-item is a file)
-#   merge_fragments       — hooks.d, mcp-servers.d (jq-merged into a target)
+#   reflect_dir       — skills, agents, plugins (dir-mode, no <ext>);
+#                       commands, output-styles (file-mode, with <ext>)
+#   reflect_tree      — marketplace (wholesale tree replace; the source
+#                       is a self-contained tree with a top-level
+#                       manifest alongside per-item children)
+#   merge_fragments   — hooks.d, mcp-servers.d (directory of fragments
+#                       jq-merged into a target via a matcher-aware
+#                       per-event filter)
+#   merge_one         — plugin-defaults.json (single-file top-level
+#                       merge into a target via a jq filter)
 #
 # Invariants (enforced by every helper):
 #   - No-op when source is missing or empty (FR-004 / generalized FR-005).
@@ -160,36 +116,47 @@ chown claude:claude "$CLAUDE_HOME/.vscode-server"
 # Contracts: specs/005-config-bundling/contracts/{reflection-helpers,merge-filters}.md
 # ============================================================================
 
-reflect_dir_of_dirs() {
-    local src="$1" dest="$2"
+# reflect_dir <src> <dest> [<ext>]
+#   - If <ext> is provided: file-mode. Iterates *.<ext> files at depth 1.
+#   - If <ext> is omitted:  dir-mode.  Iterates direct subdirectories.
+reflect_dir() {
+    local src="$1" dest="$2" ext="${3:-}"
     [ -d "$src" ] && [ -n "$(ls -A "$src" 2>/dev/null)" ] || return 0
     install -d -o claude -g claude "$dest"
     local item name
-    for item in "$src"/*/; do
-        [ -d "$item" ] || continue
-        name=$(basename "$item")
-        # .gitkeep guard: skip the placeholder file masquerading as dir
-        [ "$name" = ".gitkeep" ] && continue
-        rm -rf "$dest/$name" \
-            && cp -r "$item" "$dest/$name" \
-            && chown -R claude:claude "$dest/$name" \
-            || { echo "[entrypoint] WARN: skipped reflecting $src/$name" >&2; continue; }
-    done
+    if [ -n "$ext" ]; then
+        # file-mode
+        while IFS= read -r item; do
+            [ -f "$item" ] || continue
+            name=$(basename "$item")
+            [ "$name" = ".gitkeep" ] && continue
+            rm -f "$dest/$name" \
+                && cp "$item" "$dest/$name" \
+                || { echo "[entrypoint] WARN: skipped reflecting $item" >&2; continue; }
+        done < <(LC_ALL=C find "$src" -maxdepth 1 -type f -name "*.$ext" | LC_ALL=C sort)
+    else
+        # dir-mode
+        for item in "$src"/*/; do
+            [ -d "$item" ] || continue
+            name=$(basename "$item")
+            [ "$name" = ".gitkeep" ] && continue
+            rm -rf "$dest/$name" \
+                && cp -r "$item" "$dest/$name" \
+                || { echo "[entrypoint] WARN: skipped reflecting $src/$name" >&2; continue; }
+        done
+    fi
 }
 
-reflect_dir_of_files() {
-    local src="$1" dest="$2" ext="$3"
-    [ -d "$src" ] && [ -n "$(ls -A "$src" 2>/dev/null)" ] || return 0
-    install -d -o claude -g claude "$dest"
-    local file name
-    while IFS= read -r file; do
-        [ -f "$file" ] || continue
-        name=$(basename "$file")
-        rm -f "$dest/$name" \
-            && cp "$file" "$dest/$name" \
-            && chown claude:claude "$dest/$name" \
-            || { echo "[entrypoint] WARN: skipped reflecting $file" >&2; continue; }
-    done < <(LC_ALL=C find "$src" -maxdepth 1 -type f -name "*.$ext" | LC_ALL=C sort)
+# reflect_tree <src> <dest>
+#   Wholesale: rm -rf <dest>; cp -r <src> <dest>. Used when the source is
+#   a self-contained tree (manifest + per-item children) and per-item
+#   precedence rules don't apply.
+reflect_tree() {
+    local src="$1" dest="$2"
+    [ -d "$src" ] || return 0
+    rm -rf "$dest" \
+        && cp -r "$src" "$dest" \
+        || echo "[entrypoint] WARN: reflect_tree $src -> $dest failed" >&2
 }
 
 # jq filters (defined as bash variables for locality with the helpers).
@@ -230,9 +197,8 @@ def merge_hooks_event(existing; bundled):
 JQ
 
 merge_fragments() {
-    local src_dir="$1" target="$2" filter_var="$3" default_target_json="$4"
+    local src_dir="$1" target="$2" filter="$3" default_target_json="$4"
     [ -d "$src_dir" ] && [ -n "$(ls -A "$src_dir" 2>/dev/null)" ] || return 0
-    local filter="${!filter_var}"
     # Append all valid fragments (in lex order) to a JSON array. Each
     # array element is the WHOLE fragment object — the merge filter
     # decides per-key how to combine them (object-merge for mcpServers,
@@ -252,25 +218,42 @@ merge_fragments() {
     if [ ! -f "$target" ]; then
         install -d -o claude -g claude "$(dirname "$target")"
         printf '%s\n' "$default_target_json" > "$target"
-        chown claude:claude "$target"
     fi
     local merged
     merged=$(jq --argjson fragments "$fragments_json" "$filter" "$target") \
         || { echo "[entrypoint] WARN: jq merge into $target failed" >&2; return 0; }
     printf '%s\n' "$merged" > "$target.tmp" \
         && mv "$target.tmp" "$target" \
-        && chown claude:claude "$target" \
         || { echo "[entrypoint] WARN: write of merged $target failed" >&2; return 0; }
 }
 
+# merge_one <target> <source> <filter>
+#   Merge one source JSON file into <target> using <filter>. Filter
+#   receives target as . and source via --argjson source. Idempotent
+#   if filter is.
+merge_one() {
+    local target="$1" source="$2" filter="$3"
+    [ -f "$source" ] && [ -f "$target" ] || return 0
+    if ! jq empty "$source" >/dev/null 2>&1; then
+        echo "[entrypoint] WARN: merge_one source $source is malformed — skipping" >&2
+        return 0
+    fi
+    local merged
+    merged=$(jq --argjson source "$(cat "$source")" "$filter" "$target") \
+        || { echo "[entrypoint] WARN: merge_one of $source into $target failed" >&2; return 0; }
+    printf '%s\n' "$merged" > "$target.tmp" \
+        && mv "$target.tmp" "$target" \
+        || echo "[entrypoint] WARN: write of merged $target failed" >&2
+}
+
 # ---- Per-type reflection call sites (one line each — SC-003) ----
-reflect_dir_of_dirs  "$SOURCE_DIR/skills"        "$CONFIG_DIR/skills"
-reflect_dir_of_dirs  "$SOURCE_DIR/agents"        "$CONFIG_DIR/agents"
-reflect_dir_of_dirs  "$SOURCE_DIR/plugins"       "$CONFIG_DIR/plugins"
-reflect_dir_of_files "$SOURCE_DIR/commands"      "$CONFIG_DIR/commands"      md
-reflect_dir_of_files "$SOURCE_DIR/output-styles" "$CONFIG_DIR/output-styles" md
-merge_fragments      "$SOURCE_DIR/hooks.d"        "$CONFIG_DIR/settings.json" HOOKS_MERGE_FILTER '{}'
-merge_fragments      "$SOURCE_DIR/mcp-servers.d"  "$CONFIG_DIR/.mcp.json"     MCP_MERGE_FILTER   '{"mcpServers":{}}'
+reflect_dir     "$SOURCE_DIR/skills"        "$CONFIG_DIR/skills"
+reflect_dir     "$SOURCE_DIR/agents"        "$CONFIG_DIR/agents"
+reflect_dir     "$SOURCE_DIR/plugins"       "$CONFIG_DIR/plugins"
+reflect_dir     "$SOURCE_DIR/commands"      "$CONFIG_DIR/commands"      md
+reflect_dir     "$SOURCE_DIR/output-styles" "$CONFIG_DIR/output-styles" md
+merge_fragments "$SOURCE_DIR/hooks.d"       "$CONFIG_DIR/settings.json" "$HOOKS_MERGE_FILTER" '{}'
+merge_fragments "$SOURCE_DIR/mcp-servers.d" "$CONFIG_DIR/.mcp.json"     "$MCP_MERGE_FILTER"   '{"mcpServers":{}}'
 
 # ----------------------------------------------------------------------------
 # Plugin marketplace activation (feature 005 follow-up)
@@ -290,26 +273,21 @@ merge_fragments      "$SOURCE_DIR/mcp-servers.d"  "$CONFIG_DIR/.mcp.json"     MC
 #      by an earlier (pre-marketplace) bundle layout. Only the four
 #      previously-bundled names are touched — anything else under that
 #      directory is Claude Code's own state and is left alone.
-if [ -d "$SOURCE_DIR/marketplace" ]; then
-    rm -rf "$CONFIG_DIR/kroclaude-marketplace"
-    cp -r "$SOURCE_DIR/marketplace" "$CONFIG_DIR/kroclaude-marketplace" \
-        && chown -R claude:claude "$CONFIG_DIR/kroclaude-marketplace" \
-        || echo "[entrypoint] WARN: marketplace reflection failed" >&2
-fi
+reflect_tree "$SOURCE_DIR/marketplace"        "$CONFIG_DIR/kroclaude-marketplace"
+merge_one    "$CONFIG_DIR/settings.json"      "$SOURCE_DIR/plugin-defaults.json" '. * $source'
 
-if [ -f "$SOURCE_DIR/plugin-defaults.json" ] && [ -f "$CONFIG_DIR/settings.json" ]; then
-    if merged=$(jq -s '.[0] * .[1]' "$CONFIG_DIR/settings.json" "$SOURCE_DIR/plugin-defaults.json" 2>/dev/null); then
-        printf '%s\n' "$merged" > "$CONFIG_DIR/settings.json.tmp" \
-            && mv "$CONFIG_DIR/settings.json.tmp" "$CONFIG_DIR/settings.json" \
-            && chown claude:claude "$CONFIG_DIR/settings.json"
-    else
-        echo "[entrypoint] WARN: plugin-defaults.json merge into settings.json failed" >&2
-    fi
+# Orphan cleanup: any name listed in the bundled marketplace manifest that
+# previously lived under ~/.claude/plugins/ (pre-PR #5 layout) gets removed.
+# Driven from marketplace.json so adding/removing a plugin needs only one
+# edit (the manifest), not two. Anything else under ~/.claude/plugins/ is
+# Claude Code's own state or a user install — never touched.
+if [ -f "$SOURCE_DIR/marketplace/.claude-plugin/marketplace.json" ]; then
+    while IFS= read -r orphan; do
+        [ -n "$orphan" ] && [ -d "$CONFIG_DIR/plugins/$orphan" ] \
+            && rm -rf "$CONFIG_DIR/plugins/$orphan"
+    done < <(jq -r '.plugins[].name // empty' \
+        "$SOURCE_DIR/marketplace/.claude-plugin/marketplace.json" 2>/dev/null)
 fi
-
-for orphan in csharp-lsp commit-commands feature-dev claude-mem; do
-    [ -d "$CONFIG_DIR/plugins/$orphan" ] && rm -rf "$CONFIG_DIR/plugins/$orphan"
-done
 
 # ---------- SSH host keys + authorized_keys seeding (feature 003-ssh-access) ----------
 # Host keys are generated ONCE (FR-009 fingerprint stability) inside the
@@ -318,31 +296,26 @@ done
 # boot (FR-007 — latest env wins; NOT sentinel-guarded).
 SSH_HOST_KEY_DIR="$CONFIG_DIR/.ssh-host-keys"
 install -d -m 0700 -o claude -g claude "$SSH_HOST_KEY_DIR"
-if [ ! -f "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key" ]; then
-    ssh-keygen -t ed25519 -N '' -f "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key" >/dev/null
-    chown claude:claude "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key" "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key.pub"
-    chmod 0600 "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key"
-    chmod 0644 "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key.pub"
-fi
-if [ ! -f "$SSH_HOST_KEY_DIR/ssh_host_rsa_key" ]; then
-    ssh-keygen -t rsa -b 3072 -N '' -f "$SSH_HOST_KEY_DIR/ssh_host_rsa_key" >/dev/null
-    chown claude:claude "$SSH_HOST_KEY_DIR/ssh_host_rsa_key" "$SSH_HOST_KEY_DIR/ssh_host_rsa_key.pub"
-    chmod 0600 "$SSH_HOST_KEY_DIR/ssh_host_rsa_key"
-    chmod 0644 "$SSH_HOST_KEY_DIR/ssh_host_rsa_key.pub"
-fi
+for spec in "ed25519" "rsa -b 3072"; do
+    name=ssh_host_${spec%% *}_key
+    if [ ! -f "$SSH_HOST_KEY_DIR/$name" ]; then
+        ssh-keygen -t $spec -N '' -f "$SSH_HOST_KEY_DIR/$name" >/dev/null
+        chmod 0600 "$SSH_HOST_KEY_DIR/$name"
+        chmod 0644 "$SSH_HOST_KEY_DIR/$name.pub"
+    fi
+done
 
 install -d -m 0700 -o claude -g claude "$CLAUDE_HOME/.ssh"
 printf '%s\n' "${KROCLAUDE_SSH_AUTHORIZED_KEY:-}" > "$CLAUDE_HOME/.ssh/authorized_keys"
 chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
-chown claude:claude "$CLAUDE_HOME/.ssh/authorized_keys"
 
-# ---------- Final ownership safety-net (idempotent, every boot) ----------
-# Belt-and-braces sweep: any newly-added named volume mount, any path
-# Docker created root-owned on first boot, and any stray file written
-# during seeding before its targeted chown all get reconciled here.
-# Cheap on subsequent boots (already claude-owned) and avoids future
-# "I added a volume and forgot the chown" footguns.
-chown -R claude:claude "$CLAUDE_HOME" /workspace
+# ---------- Final ownership sweep (idempotent, every boot) ----------
+# Single point of truth: every path under $CLAUDE_HOME is claude-owned
+# by the time s6 takes over. /workspace is intentionally NOT swept —
+# it's never written-to during docker build, the WORKDIR is chowned
+# in the Dockerfile, and Docker's named-volume mount inherits
+# ownership from the (claude-owned) target on first boot.
+chown -R claude:claude "$CLAUDE_HOME"
 
 export DISPLAY=:99
 

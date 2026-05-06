@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/notify.py stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

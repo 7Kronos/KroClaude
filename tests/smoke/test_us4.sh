@@ -11,23 +11,11 @@
 #   US3 — password auth, root login, and wrong-key all rejected.
 set -euo pipefail
 
-: "${COMPOSE:=docker compose}"
-SVC=kroclaude
-export COMPOSE_PROJECT_NAME=kroclaude
+LOG_TAG=us4
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
 
 TMP_DIR=$(mktemp -d)
-
-log()  { printf '\n[us4] %s\n' "$*"; }
-fail() { printf '[us4] FAIL: %s\n' "$*" >&2; $COMPOSE logs --no-color $SVC || true; exit 1; }
-
-wait_healthy() {
-    for i in $(seq 1 60); do
-        s=$(docker inspect --format '{{.State.Health.Status}}' "$SVC" 2>/dev/null || echo starting)
-        [ "$s" = "healthy" ] && return 0
-        sleep 1
-    done
-    fail "container did not reach healthy in 60s"
-}
 
 # Wrapper around ssh with smoke-friendly options. Args: <key-path> <port> <remote-cmd>
 ssh_test() {
@@ -41,7 +29,7 @@ ssh_test() {
 }
 
 cleanup() {
-    $COMPOSE down --remove-orphans -v >/dev/null 2>&1 || true
+    cleanup_compose
     rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT
