@@ -61,6 +61,10 @@ services:
       - kroclaude-gh:/home/claude/.config/gh
       - kroclaude-codex:/home/claude/.codex
       - kroclaude-gemini:/home/claude/.gemini
+      # VS Code Remote-SSH downloads its server binary and any installed
+      # extensions into ~/.vscode-server on first connect. Persisting it
+      # keeps that ~200 MB install + extension state across redeploys.
+      - kroclaude-vscode:/home/claude/.vscode-server
 
   # Isolated Docker-in-Docker sidecar. Joins kroclaude's network
   # namespace so localhost-published ports (the Aspire/.NET pattern)
@@ -88,4 +92,5 @@ volumes:
   kroclaude-gh:
   kroclaude-codex:
   kroclaude-gemini:
+  kroclaude-vscode:
   dind-data:

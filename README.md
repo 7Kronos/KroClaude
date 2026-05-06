@@ -36,6 +36,7 @@ Persistent named volumes (declared in [docker-compose.yaml](docker-compose.yaml)
 
 - `kroclaude-config` → `/home/claude/.claude` — CLI config, credentials, history, bundled skills/commands/agents/etc.
 - `kroclaude-workspace` → `/workspace` — your code.
+- `kroclaude-vscode` → `/home/claude/.vscode-server` — VS Code Remote-SSH server install and installed extensions (avoids re-download on every redeploy).
 
 Both survive `docker compose down` and image rebuilds. Wipe with `down -v`.
 
@@ -99,11 +100,13 @@ entries overlay any same-named entry already in `settings.json` /
 [`specs/005-config-bundling/quickstart.md`](specs/005-config-bundling/quickstart.md)
 for fragment shapes and examples.
 
-The two seed files [`config/settings.json`](config/settings.json) and
-[`config/CLAUDE.md`](config/CLAUDE.md) are special: they're copied
-into the persistent volume **once on first boot** (sentinel-gated).
-Edits to those files in the repo affect new deployments only — to
-re-seed an existing container, wipe the `kroclaude-config` volume.
+The three seed files [`config/settings.json`](config/settings.json),
+[`config/CLAUDE.md`](config/CLAUDE.md), and
+[`config/claude-powerline.json`](config/claude-powerline.json) are
+special: they're copied into the persistent volume **once on first
+boot** (sentinel-gated). Edits to those files in the repo affect new
+deployments only — to re-seed an existing container, wipe the
+`kroclaude-config` volume.
 
 ## Default behaviour
 

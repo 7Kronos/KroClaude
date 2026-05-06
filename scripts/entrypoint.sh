@@ -23,8 +23,9 @@ SENTINEL="$CONFIG_DIR/.kroclaude-bootstrapped"
 if [ ! -f "$SENTINEL" ]; then
     install -d -o claude -g claude "$CONFIG_DIR"
 
-    cp "$SOURCE_DIR/settings.json" "$CONFIG_DIR/settings.json"
-    cp "$SOURCE_DIR/CLAUDE.md"     "$CONFIG_DIR/CLAUDE.md"
+    cp "$SOURCE_DIR/settings.json"          "$CONFIG_DIR/settings.json"
+    cp "$SOURCE_DIR/CLAUDE.md"              "$CONFIG_DIR/CLAUDE.md"
+    cp "$SOURCE_DIR/claude-powerline.json"  "$CONFIG_DIR/claude-powerline.json"
 
     runuser -u claude -- git config --global safe.directory /workspace
     runuser -u claude -- git config --global user.name  "${GIT_USER_NAME:-KroClaude User}"
@@ -125,6 +126,14 @@ chown -R claude:claude "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
 # already claude-owned (gh wrote it).
 install -d "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
 chown claude:claude "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
+
+# ---------- ~/.vscode-server ownership (idempotent, every boot) ----------
+# Same root:root-on-empty-volume issue as ~/.config/gh above. VS Code
+# Remote-SSH connects as claude and writes its server install +
+# extensions here; without the chown, the first connect after a wipe
+# fails silently and VS Code falls back to re-downloading every time.
+install -d "$CLAUDE_HOME/.vscode-server"
+chown claude:claude "$CLAUDE_HOME/.vscode-server"
 
 # ============================================================================
 # Bundled customization reflection (feature 005-config-bundling)
@@ -326,6 +335,14 @@ install -d -m 0700 -o claude -g claude "$CLAUDE_HOME/.ssh"
 printf '%s\n' "${KROCLAUDE_SSH_AUTHORIZED_KEY:-}" > "$CLAUDE_HOME/.ssh/authorized_keys"
 chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
 chown claude:claude "$CLAUDE_HOME/.ssh/authorized_keys"
+
+# ---------- Final ownership safety-net (idempotent, every boot) ----------
+# Belt-and-braces sweep: any newly-added named volume mount, any path
+# Docker created root-owned on first boot, and any stray file written
+# during seeding before its targeted chown all get reconciled here.
+# Cheap on subsequent boots (already claude-owned) and avoids future
+# "I added a volume and forgot the chown" footguns.
+chown -R claude:claude "$CLAUDE_HOME" /workspace
 
 export DISPLAY=:99
 
