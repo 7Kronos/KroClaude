@@ -246,6 +246,41 @@ RUN printf '\nexport HISTFILE=/home/claude/.claude/.bash_history\nexport HISTSIZ
     >> /home/claude/.bashrc && \
     chown claude:claude /home/claude/.bashrc
 
+# ---------- `remote` shell function (claude remote-control launcher) ----------
+# Convenience launcher: spins up a Remote Control server in $PWD (controllable
+# from claude.ai/code), spawns one isolated git worktree per on-demand session,
+# prefixes session names with $(basename $PWD), runs sessions with permissions
+# bypassed, and pre-flags $PWD as trusted in ~/.claude.json so the workspace-
+# trust dialog never blocks bootstrap. ~/.claude.json is a symlink into the
+# persistent ~/.claude/ volume — the jq edit writes through `cat >` (not mv)
+# so we don't replace the symlink with a regular file.
+RUN <<'DOCKERFILE'
+cat >> /home/claude/.bashrc <<'BASHRC'
+
+remote() {
+    local prefix
+    prefix=$(basename "$PWD")
+
+    if command -v jq >/dev/null 2>&1 && [ -e "$HOME/.claude.json" ]; then
+        local tmp
+        if tmp=$(mktemp) && jq --arg p "$PWD" \
+                '.projects[$p] = ((.projects[$p] // {}) + {hasTrustDialogAccepted: true})' \
+                "$HOME/.claude.json" > "$tmp"; then
+            cat "$tmp" > "$HOME/.claude.json"
+        fi
+        [ -n "${tmp:-}" ] && rm -f "$tmp"
+    fi
+
+    claude remote-control \
+        --spawn worktree \
+        --remote-control-session-name-prefix "$prefix" \
+        --permission-mode bypassPermissions \
+        "$@"
+}
+BASHRC
+chown claude:claude /home/claude/.bashrc
+DOCKERFILE
+
 # ---------- Land interactive logins in /workspace (feature 003) ----------
 # /etc/profile sources /etc/profile.d/*.sh for login shells (interactive
 # SSH login, `bash -l`). Non-interactive `ssh user@host cmd` invocations
