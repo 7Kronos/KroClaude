@@ -54,23 +54,23 @@ fetch_full() {
     log "fetch $name @ $ref from $url"
     rm -rf "$dest"
     mkdir -p "$dest"
-    if ! git -C "$dest" init --quiet; then
-        warn "$name: git init failed — skipping"
+    if ! git -C "$dest" init; then
+        warn "$name: git init failed (see git output above) — skipping"
         rm -rf "$dest"
         return 0
     fi
     if ! git -C "$dest" remote add origin "$url"; then
-        warn "$name: git remote add failed — skipping"
+        warn "$name: git remote add failed (see git output above) — skipping"
         rm -rf "$dest"
         return 0
     fi
-    if ! git -C "$dest" fetch --quiet --depth 1 origin "$ref"; then
-        warn "$name: git fetch failed — skipping"
+    if ! git -C "$dest" fetch --depth 1 origin "$ref"; then
+        warn "$name: git fetch failed (see git output above) — skipping"
         rm -rf "$dest"
         return 0
     fi
-    if ! git -C "$dest" checkout --quiet FETCH_HEAD; then
-        warn "$name: git checkout failed — skipping"
+    if ! git -C "$dest" checkout FETCH_HEAD; then
+        warn "$name: git checkout failed (see git output above) — skipping"
         rm -rf "$dest"
         return 0
     fi
@@ -115,35 +115,35 @@ fetch_subpaths() {
     done
 
     local tmp; tmp="$(mktemp -d)"
-    if ! git -C "$tmp" init --quiet; then
-        warn "monorepo git init failed — skipping all subpaths"
+    if ! git -C "$tmp" init; then
+        warn "monorepo git init failed (see git output above) — skipping all subpaths"
         rm -rf "$tmp"; return 0
     fi
     if ! git -C "$tmp" remote add origin "$url"; then
-        warn "monorepo git remote add failed — skipping all subpaths"
+        warn "monorepo git remote add failed (see git output above) — skipping all subpaths"
         rm -rf "$tmp"; return 0
     fi
     if ! git -C "$tmp" config core.sparseCheckout true; then
-        warn "monorepo git config sparseCheckout failed — skipping all subpaths"
+        warn "monorepo git config sparseCheckout failed (see git output above) — skipping all subpaths"
         rm -rf "$tmp"; return 0
     fi
-    if ! git -C "$tmp" sparse-checkout init --no-cone >/dev/null; then
-        warn "monorepo sparse-checkout init failed — skipping all subpaths"
+    if ! git -C "$tmp" sparse-checkout init --no-cone; then
+        warn "monorepo sparse-checkout init failed (see git output above) — skipping all subpaths"
         rm -rf "$tmp"; return 0
     fi
     for pair in "${pairs[@]}"; do
         subpath="${pair%%:*}"
-        if ! git -C "$tmp" sparse-checkout add --no-cone "$subpath" >/dev/null; then
-            warn "monorepo sparse-checkout add '$subpath' failed — skipping all subpaths"
+        if ! git -C "$tmp" sparse-checkout add --no-cone "$subpath"; then
+            warn "monorepo sparse-checkout add '$subpath' failed (see git output above) — skipping all subpaths"
             rm -rf "$tmp"; return 0
         fi
     done
-    if ! git -C "$tmp" fetch --quiet --depth 1 --filter=blob:none origin "$ref"; then
-        warn "monorepo git fetch failed — skipping all subpaths"
+    if ! git -C "$tmp" fetch --depth 1 --filter=blob:none origin "$ref"; then
+        warn "monorepo git fetch failed (see git output above) — skipping all subpaths"
         rm -rf "$tmp"; return 0
     fi
-    if ! git -C "$tmp" checkout --quiet FETCH_HEAD; then
-        warn "monorepo git checkout failed — skipping all subpaths"
+    if ! git -C "$tmp" checkout FETCH_HEAD; then
+        warn "monorepo git checkout failed (see git output above) — skipping all subpaths"
         rm -rf "$tmp"; return 0
     fi
 
@@ -191,3 +191,24 @@ fetch_full "$PLAYWRIGHT_SKILL_URL" "$PLAYWRIGHT_SKILL_REF" \
     "$SKILLS_DIR/playwright-skill"
 
 log "done."
+
+# ---------- Manifest verification ----------
+# Every plugin listed in marketplace.json MUST have a directory next to
+# it after the fetches above. If any are missing, the build is broken —
+# fail loudly here rather than baking a half-empty bundle into the image
+# and letting the entrypoint reflect it into
+# ~/.claude/kroclaude-marketplace/ where Claude Code will then complain
+# to the user about "Plugin directory not found at path".
+MANIFEST="$MARKETPLACE_DIR/.claude-plugin/marketplace.json"
+if [ -f "$MANIFEST" ]; then
+    missing=()
+    while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        [ -d "$MARKETPLACE_DIR/$name" ] || missing+=("$name")
+    done < <(jq -r '.plugins[].name // empty' "$MANIFEST")
+    if [ "${#missing[@]}" -gt 0 ]; then
+        warn "manifest lists plugins not present on disk: ${missing[*]}"
+        warn "check the git fetch errors above for the root cause"
+        exit 1
+    fi
+fi
