@@ -289,6 +289,23 @@ if [ -f "$SOURCE_DIR/marketplace/.claude-plugin/marketplace.json" ]; then
         "$SOURCE_DIR/marketplace/.claude-plugin/marketplace.json" 2>/dev/null)
 fi
 
+# Runtime manifest backstop: scripts/fetch-plugins.sh exits non-zero at
+# build time if any plugin listed in marketplace.json is missing on disk,
+# so a healthy image never trips this loop. Log a WARN per missing plugin
+# anyway — any future bypass (manual COPY override, sideloaded bundle,
+# regression) becomes visible in `docker logs` instead of surfacing as a
+# cryptic per-plugin error inside Claude Code. WARN only, never abort
+# (FR-009: container always boots).
+RUNTIME_MANIFEST="$CONFIG_DIR/kroclaude-marketplace/.claude-plugin/marketplace.json"
+if [ -f "$RUNTIME_MANIFEST" ]; then
+    while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        if [ ! -d "$CONFIG_DIR/kroclaude-marketplace/$name" ]; then
+            echo "[entrypoint] WARN: bundled marketplace lists plugin '$name' but $CONFIG_DIR/kroclaude-marketplace/$name does not exist — Claude Code will fail to load it" >&2
+        fi
+    done < <(jq -r '.plugins[].name // empty' "$RUNTIME_MANIFEST" 2>/dev/null)
+fi
+
 # ---------- SSH host keys + authorized_keys seeding (feature 003-ssh-access) ----------
 # Host keys are generated ONCE (FR-009 fingerprint stability) inside the
 # kroclaude-config volume so they survive container recreation.
