@@ -88,19 +88,13 @@ install -d -o claude -g claude "$CLAUDE_HOME/.vscode-server"
 # Bundled customization reflection (feature 005-config-bundling)
 # ----------------------------------------------------------------------------
 # Reflects each per-type subdirectory of $SOURCE_DIR/<type>/ into
-# ~/.claude/<type>/ on EVERY boot. Five helper functions cover three
-# reflection patterns and two merge patterns:
+# ~/.claude/<type>/ on EVERY boot. Two helpers cover the patterns:
 #
 #   reflect_dir       — skills, agents, plugins (dir-mode, no <ext>);
 #                       commands, output-styles (file-mode, with <ext>)
-#   reflect_tree      — marketplace (wholesale tree replace; the source
-#                       is a self-contained tree with a top-level
-#                       manifest alongside per-item children)
 #   merge_fragments   — hooks.d, mcp-servers.d (directory of fragments
 #                       jq-merged into a target via a matcher-aware
 #                       per-event filter)
-#   merge_one         — plugin-defaults.json (single-file top-level
-#                       merge into a target via a jq filter)
 #
 # Invariants (enforced by every helper):
 #   - No-op when source is missing or empty (FR-004 / generalized FR-005).
@@ -145,18 +139,6 @@ reflect_dir() {
                 || { echo "[entrypoint] WARN: skipped reflecting $src/$name" >&2; continue; }
         done
     fi
-}
-
-# reflect_tree <src> <dest>
-#   Wholesale: rm -rf <dest>; cp -r <src> <dest>. Used when the source is
-#   a self-contained tree (manifest + per-item children) and per-item
-#   precedence rules don't apply.
-reflect_tree() {
-    local src="$1" dest="$2"
-    [ -d "$src" ] || return 0
-    rm -rf "$dest" \
-        && cp -r "$src" "$dest" \
-        || echo "[entrypoint] WARN: reflect_tree $src -> $dest failed" >&2
 }
 
 # jq filters (defined as bash variables for locality with the helpers).
@@ -227,25 +209,6 @@ merge_fragments() {
         || { echo "[entrypoint] WARN: write of merged $target failed" >&2; return 0; }
 }
 
-# merge_one <target> <source> <filter>
-#   Merge one source JSON file into <target> using <filter>. Filter
-#   receives target as . and source via --argjson source. Idempotent
-#   if filter is.
-merge_one() {
-    local target="$1" source="$2" filter="$3"
-    [ -f "$source" ] && [ -f "$target" ] || return 0
-    if ! jq empty "$source" >/dev/null 2>&1; then
-        echo "[entrypoint] WARN: merge_one source $source is malformed — skipping" >&2
-        return 0
-    fi
-    local merged
-    merged=$(jq --argjson source "$(cat "$source")" "$filter" "$target") \
-        || { echo "[entrypoint] WARN: merge_one of $source into $target failed" >&2; return 0; }
-    printf '%s\n' "$merged" > "$target.tmp" \
-        && mv "$target.tmp" "$target" \
-        || echo "[entrypoint] WARN: write of merged $target failed" >&2
-}
-
 # ---- Per-type reflection call sites (one line each — SC-003) ----
 reflect_dir     "$SOURCE_DIR/skills"        "$CONFIG_DIR/skills"
 reflect_dir     "$SOURCE_DIR/agents"        "$CONFIG_DIR/agents"
@@ -256,54 +219,65 @@ merge_fragments "$SOURCE_DIR/hooks.d"       "$CONFIG_DIR/settings.json" "$HOOKS_
 merge_fragments "$SOURCE_DIR/mcp-servers.d" "$CONFIG_DIR/.mcp.json"     "$MCP_MERGE_FILTER"   '{"mcpServers":{}}'
 
 # ----------------------------------------------------------------------------
-# Plugin marketplace activation (feature 005 follow-up)
+# Plugin marketplaces, plugins, skills, MCP servers (every boot)
 # ----------------------------------------------------------------------------
-# Bundling plugin trees on disk is necessary but not sufficient — Claude
-# Code only activates plugins that are (a) registered through a known
-# marketplace and (b) listed in `enabledPlugins`. Three steps:
-#
-#   1. Reflect the entire $SOURCE_DIR/marketplace/ tree wholesale into
-#      ~/.claude/kroclaude-marketplace/ (NOT ~/.claude/plugins/, which
-#      Claude Code manages itself).
-#   2. Merge $SOURCE_DIR/plugin-defaults.json into ~/.claude/settings.json
-#      on every boot. This is the bundle's hook for top-level keys
-#      (extraKnownMarketplaces, enabledPlugins) that aren't covered by
-#      hooks.d/ or mcp-servers.d/. Bundle wins on collision.
-#   3. Clean up orphan plugin directories left under ~/.claude/plugins/
-#      by an earlier (pre-marketplace) bundle layout. Only the four
-#      previously-bundled names are touched — anything else under that
-#      directory is Claude Code's own state and is left alone.
-reflect_tree "$SOURCE_DIR/marketplace"        "$CONFIG_DIR/kroclaude-marketplace"
-merge_one    "$CONFIG_DIR/settings.json"      "$SOURCE_DIR/plugin-defaults.json" '. * $source'
+# No sentinel: this whole block runs on every container start so plugins,
+# marketplaces, skills, and MCP configs stay current. Each step is shaped
+# for re-entry — `add` calls swallow "already exists" errors, `update`
+# does the real refresh, MCPs are remove+re-add so env-var changes from
+# the deployment propagate. Per-item failure is non-fatal (FR-009).
 
-# Orphan cleanup: any name listed in the bundled marketplace manifest that
-# previously lived under ~/.claude/plugins/ (pre-PR #5 layout) gets removed.
-# Driven from marketplace.json so adding/removing a plugin needs only one
-# edit (the manifest), not two. Anything else under ~/.claude/plugins/ is
-# Claude Code's own state or a user install — never touched.
-if [ -f "$SOURCE_DIR/marketplace/.claude-plugin/marketplace.json" ]; then
-    while IFS= read -r orphan; do
-        [ -n "$orphan" ] && [ -d "$CONFIG_DIR/plugins/$orphan" ] \
-            && rm -rf "$CONFIG_DIR/plugins/$orphan"
-    done < <(jq -r '.plugins[].name // empty' \
-        "$SOURCE_DIR/marketplace/.claude-plugin/marketplace.json" 2>/dev/null)
+# Marketplaces: add (no-op once present), then update all to pull latest manifests.
+runuser -u claude -- claude plugin marketplace add github:anthropics/claude-plugins-official >/dev/null 2>&1 || true
+runuser -u claude -- claude plugin marketplace add github:thedotmack/claude-mem >/dev/null 2>&1 || true
+runuser -u claude -- claude plugin marketplace update \
+    || echo "[entrypoint] WARN: failed to update marketplaces" >&2
+
+# Plugins: install (idempotent per `claude plugin install`) then update each.
+for p in csharp-lsp@claude-plugins-official \
+         commit-commands@claude-plugins-official \
+         feature-dev@claude-plugins-official \
+         claude-mem@claude-mem; do
+    runuser -u claude -- claude plugin install "$p" >/dev/null 2>&1 \
+        || echo "[entrypoint] WARN: failed to install plugin $p" >&2
+    runuser -u claude -- claude plugin update "${p%@*}" >/dev/null 2>&1 || true
+done
+
+# playwright-skill is a plain skill (no CLI install path); clone or fast-forward.
+if [ -d "$CONFIG_DIR/skills/playwright-skill/.git" ]; then
+    runuser -u claude -- git -C "$CONFIG_DIR/skills/playwright-skill" pull --ff-only --quiet \
+        || echo "[entrypoint] WARN: failed to update playwright-skill" >&2
+elif [ ! -d "$CONFIG_DIR/skills/playwright-skill" ]; then
+    runuser -u claude -- git clone --depth 1 \
+        https://github.com/lackeyjb/playwright-skill \
+        "$CONFIG_DIR/skills/playwright-skill" \
+        || echo "[entrypoint] WARN: failed to clone playwright-skill" >&2
 fi
 
-# Runtime manifest backstop: scripts/fetch-plugins.sh exits non-zero at
-# build time if any plugin listed in marketplace.json is missing on disk,
-# so a healthy image never trips this loop. Log a WARN per missing plugin
-# anyway — any future bypass (manual COPY override, sideloaded bundle,
-# regression) becomes visible in `docker logs` instead of surfacing as a
-# cryptic per-plugin error inside Claude Code. WARN only, never abort
-# (FR-009: container always boots).
-RUNTIME_MANIFEST="$CONFIG_DIR/kroclaude-marketplace/.claude-plugin/marketplace.json"
-if [ -f "$RUNTIME_MANIFEST" ]; then
-    while IFS= read -r name; do
-        [ -n "$name" ] || continue
-        if [ ! -d "$CONFIG_DIR/kroclaude-marketplace/$name" ]; then
-            echo "[entrypoint] WARN: bundled marketplace lists plugin '$name' but $CONFIG_DIR/kroclaude-marketplace/$name does not exist — Claude Code will fail to load it" >&2
-        fi
-    done < <(jq -r '.plugins[].name // empty' "$RUNTIME_MANIFEST" 2>/dev/null)
+# MCP servers: remove + re-add so the command line and env vars always
+# reflect the current deployment (env-var swaps take effect next restart).
+for name in context7 filesystem exa github; do
+    runuser -u claude -- claude mcp remove "$name" >/dev/null 2>&1 || true
+done
+
+runuser -u claude -- claude mcp add --scope user context7 -- \
+    npx -y @upstash/context7-mcp \
+    || echo "[entrypoint] WARN: failed to add context7 MCP" >&2
+runuser -u claude -- claude mcp add --scope user filesystem -- \
+    npx -y @modelcontextprotocol/server-filesystem /workspace \
+    || echo "[entrypoint] WARN: failed to add filesystem MCP" >&2
+
+if [ -n "${EXA_API_KEY:-}" ]; then
+    runuser -u claude -- claude mcp add --scope user -e "EXA_API_KEY=$EXA_API_KEY" exa -- \
+        npx -y exa-mcp-server \
+        || echo "[entrypoint] WARN: failed to add exa MCP" >&2
+fi
+if [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
+    runuser -u claude -- claude mcp add --scope user \
+        -e "GITHUB_PERSONAL_ACCESS_TOKEN=$GITHUB_PERSONAL_ACCESS_TOKEN" github -- \
+        docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN \
+        ghcr.io/github/github-mcp-server \
+        || echo "[entrypoint] WARN: failed to add github MCP" >&2
 fi
 
 # ---------- SSH host keys + authorized_keys seeding (feature 003-ssh-access) ----------

@@ -10,9 +10,7 @@ rules.
   Default working directory.
 - `~/.claude` — config, credentials, shell history, hook configs.
   Persistent (separate named Docker volume).
-- Everything else — ephemeral. State written outside those two paths
-  is lost on container recreation. When you need to save state, put
-  it under one of them.
+- Everything else — ephemeral.
 
 ## Tools available (already installed; do not propose installing them)
 
@@ -55,14 +53,3 @@ inside the container only sees its own children; host containers are
 invisible. The sidecar shares KroClaude's network namespace, so
 containers it spawns are reachable on `localhost:<port>`. State
 persists in the `dind-data` named volume.
-
-
-## Out of scope — do not propose
-
-- A web UI or any inbound port other than `2221/tcp` (SSH). The image
-  remains shell-only at the application layer.
-- Host bind-mounts for `/workspace`. Workspace is a named Docker volume.
-- Installing Cursor, Junie, or OpenCode CLIs. They were deliberately
-  excluded.
-- Switching to a profile / variant system. There is one curated tool
-  set, not a slim/full split.

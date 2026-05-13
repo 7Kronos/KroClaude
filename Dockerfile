@@ -231,22 +231,6 @@ COPY scripts/rm-guard.sh   /usr/local/bin/rm-guard.sh
 # feature 001 contract preserved). See specs/005-config-bundling/.
 COPY config/ /usr/local/share/kroclaude/config/
 
-# ---------- Bundled third-party plugins/skills (curated cart) ----------
-# Fetched at build time from upstream repos into the same /config/
-# bundle tree, so they ride the existing entrypoint reflection into
-# ~/.claude/{plugins,skills}/ on every boot. Refs default to `main`,
-# i.e. the latest commit on each upstream's default branch is fetched
-# every rebuild. Override per-item via build args for reproducibility
-# (e.g. `--build-arg CLAUDE_MEM_REF=<sha>`). See scripts/fetch-plugins.sh.
-ARG ANTHROPIC_OFFICIAL_REF=main
-ARG CLAUDE_MEM_REF=main
-ARG PLAYWRIGHT_SKILL_REF=main
-RUN --mount=type=bind,source=scripts/fetch-plugins.sh,target=/tmp/fetch-plugins.sh \
-    ANTHROPIC_OFFICIAL_REF="$ANTHROPIC_OFFICIAL_REF" \
-    CLAUDE_MEM_REF="$CLAUDE_MEM_REF" \
-    PLAYWRIGHT_SKILL_REF="$PLAYWRIGHT_SKILL_REF" \
-    bash /tmp/fetch-plugins.sh /usr/local/share/kroclaude/config
-
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py /usr/local/bin/rm-guard.sh && \
     install -d -o claude -g claude /home/claude/.claude
 
