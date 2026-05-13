@@ -34,8 +34,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 RUN if [ -z "$S6_OVERLAY_VERSION" ]; then \
-        S6_OVERLAY_VERSION=$(curl -fsSL https://api.github.com/repos/just-containers/s6-overlay/releases/latest \
-            | grep -oP '"tag_name":\s*"v\K[^"]+'); \
+    S6_OVERLAY_VERSION=$(curl -fsSL https://api.github.com/repos/just-containers/s6-overlay/releases/latest \
+    | grep -oP '"tag_name":\s*"v\K[^"]+'); \
     fi && \
     S6_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64";; esac) && \
     curl -fsSL -o /tmp/s6-overlay-noarch.tar.xz \
@@ -108,8 +108,8 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
 # version variable is used for both the download URL and the unzip
 # subpath (`nats-<ver>-linux-<arch>/nats`).
 RUN if [ -z "$NATS_CLI_VERSION" ]; then \
-        NATS_CLI_VERSION=$(curl -fsSL https://api.github.com/repos/nats-io/natscli/releases/latest \
-            | jq -r .tag_name | tr -d v); \
+    NATS_CLI_VERSION=$(curl -fsSL https://api.github.com/repos/nats-io/natscli/releases/latest \
+    | jq -r .tag_name | tr -d v); \
     fi && \
     NATS_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "amd64";; esac) && \
     curl -fsSL -o /tmp/nats.zip \
@@ -178,7 +178,7 @@ ENV DOTNET_ROOT=/usr/share/dotnet \
 RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
     chmod +x /tmp/dotnet-install.sh && \
     for ch in "9.0" "10.0" "11.0 --quality preview"; do \
-        /tmp/dotnet-install.sh --channel $ch --install-dir "$DOTNET_ROOT" --no-path || exit 1; \
+    /tmp/dotnet-install.sh --channel $ch --install-dir "$DOTNET_ROOT" --no-path || exit 1; \
     done && \
     rm /tmp/dotnet-install.sh && \
     ln -sf "$DOTNET_ROOT/dotnet" /usr/local/bin/dotnet
