@@ -183,6 +183,15 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
     rm /tmp/dotnet-install.sh && \
     ln -sf "$DOTNET_ROOT/dotnet" /usr/local/bin/dotnet
 
+# ---------- csharp-ls (.NET global tool, used by the bundled csharp-lsp plugin) ----------
+# Installed via `dotnet tool install` rather than the standalone OmniSharp-Roslyn
+# tarball because the `csharp-lsp` plugin in marketplace.json shells out to the
+# `csharp-ls` binary (razzmatazz/csharp-language-server). `--tool-path` installs
+# system-wide into /usr/local/bin (already on PATH for claude, entrypoint, and
+# SSH sessions); `--global` would land in /root/.dotnet/tools and miss the
+# claude user. Always installs the latest release at build time.
+RUN dotnet tool install csharp-ls --tool-path /usr/local/bin
+
 # ---------- Python packages (FR-003) ----------
 RUN pip install --no-cache-dir --break-system-packages \
     requests httpx beautifulsoup4 lxml \

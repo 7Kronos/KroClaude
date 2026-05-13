@@ -32,7 +32,7 @@ log "Asserting claude CLI is present and runnable (as claude user)"
 as_claude 'claude --version' || fail "claude --version exited non-zero"
 
 log "Asserting FR-003 sampled tools on PATH (as claude user)"
-TOOLS="git curl wget jq rg fd tree tmux fzf bat sudo gh psql redis-cli sqlite3 ffmpeg convert chromium Xvfb python3 node npm pnpm tsx prettier eslint lighthouse gemini codex dotnet nats"
+TOOLS="git curl wget jq rg fd tree tmux fzf bat sudo gh psql redis-cli sqlite3 ffmpeg convert chromium Xvfb python3 node npm pnpm tsx prettier eslint lighthouse gemini codex dotnet nats csharp-ls"
 for t in $TOOLS; do
     as_claude "command -v $t >/dev/null" || fail "tool '$t' not on PATH for claude"
 done
