@@ -36,6 +36,9 @@ services:
       # Optional notifications (Apprise URLs). Off unless the in-container
       # sentinel /home/claude/.claude/notify-on also exists.
       NOTIFY_URLS: "${NOTIFY_URLS:-}"
+      # Optional — consumed by the bundled EXA MCP server fragment
+      # (config/mcp-servers.d/exa.json).
+      EXA_API_KEY: "${EXA_API_KEY:-}"
       # Optional SSH access (feature 003-ssh-access). Verbatim contents
       # of ~claude/.ssh/authorized_keys; one or more public keys, one
       # per line. Empty = no login possible.
