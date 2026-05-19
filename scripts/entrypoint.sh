@@ -300,6 +300,30 @@ install -d -m 0700 -o claude -g claude "$CLAUDE_HOME/.ssh"
 printf '%s\n' "${KROCLAUDE_SSH_AUTHORIZED_KEY:-}" > "$CLAUDE_HOME/.ssh/authorized_keys"
 chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
 
+# ---------- /etc/environment propagation (idempotent, every boot) ----------
+# sshd does NOT inherit PID 1's environment — each login session is built
+# from /etc/environment (via pam_env, UsePAM yes), /etc/profile, and the
+# user's shell rc files. To make compose-supplied runtime vars visible to
+# SSH login shells, regenerate /etc/environment from an explicit allowlist
+# on every boot. Source of truth for the list: docker-compose.yaml
+# `environment:`. Empty values are skipped so unset vars don't show up as
+# empty strings in the shell. /etc/environment is mode 0644 (world-readable)
+# by pam_env requirement — acceptable in this single-user container, but
+# do not add vars here that must be hidden from non-claude processes.
+{
+    printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n'
+    printf 'DOCKER_HOST="tcp://localhost:2375"\n'
+    for var in ANTHROPIC_API_KEY TZ GIT_USER_NAME GIT_USER_EMAIL \
+               NODE_OPTIONS NOTIFY_URLS \
+               EXA_API_KEY GITHUB_PERSONAL_ACCESS_TOKEN \
+               NUGET_REGISTRY_USER NUGET_REGISTRY_TOKEN; do
+        val="${!var:-}"
+        [ -n "$val" ] || continue
+        printf '%s="%s"\n' "$var" "${val//\"/\\\"}"
+    done
+} > /etc/environment
+chmod 0644 /etc/environment
+
 # ---------- Final ownership sweep (idempotent, every boot) ----------
 # Single point of truth: every path under $CLAUDE_HOME is claude-owned
 # by the time s6 takes over. /workspace is intentionally NOT swept —

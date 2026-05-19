@@ -140,8 +140,11 @@ ENV PATH="/home/claude/.local/bin:${PATH}"
 
 # /etc/environment is read by pam_env (UsePAM yes in sshd_config) so SSH
 # sessions inherit the same PATH that ENV PATH gives the entrypoint.
-# DOCKER_HOST is baked here too so login/SSH shells point at the dind
-# sidecar instead of the missing /var/run/docker.sock.
+# The entrypoint regenerates this file on every boot so compose-supplied
+# runtime vars (API keys, tokens, etc.) reach SSH login shells too — see
+# the "/etc/environment propagation" block in scripts/entrypoint.sh.
+# This baseline write covers the case where the image is started with a
+# non-default entrypoint that skips the regeneration.
 RUN printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\nDOCKER_HOST="tcp://localhost:2375"\n' \
     > /etc/environment
 

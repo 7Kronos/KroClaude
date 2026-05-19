@@ -39,6 +39,13 @@ services:
       # Optional — consumed by the bundled EXA MCP server fragment
       # (config/mcp-servers.d/exa.json).
       EXA_API_KEY: "${EXA_API_KEY:-}"
+      # Optional — passed to the github MCP server (see entrypoint.sh).
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_PERSONAL_ACCESS_TOKEN:-}"
+      # Optional — credentials for a private NuGet feed; propagated to
+      # SSH login shells via /etc/environment so `dotnet restore` /
+      # `dotnet nuget` pick them up.
+      NUGET_REGISTRY_USER: "${NUGET_REGISTRY_USER:-}"
+      NUGET_REGISTRY_TOKEN: "${NUGET_REGISTRY_TOKEN:-}"
       # Optional SSH access (feature 003-ssh-access). Verbatim contents
       # of ~claude/.ssh/authorized_keys; one or more public keys, one
       # per line. Empty = no login possible.
