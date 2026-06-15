@@ -14,7 +14,7 @@ services:
       [
         "sh",
         "-c",
-        "[ -e /workspace/.omc-workspace ] || install -m 0644 /dev/null /workspace/.omc-workspace",
+        "[ -s /workspace/.omc-workspace ] || echo '{}' > /workspace/.omc-workspace && chmod 0644 /workspace/.omc-workspace",
       ]
     volumes:
       - workspace:/workspace
