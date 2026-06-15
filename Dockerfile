@@ -10,6 +10,12 @@ LABEL org.opencontainers.image.description="Claude Code shell environment"
 # e.g. `--build-arg S6_OVERLAY_VERSION=3.2.0.2`.
 ARG S6_OVERLAY_VERSION=
 ARG NATS_CLI_VERSION=
+ARG KUBECTL_VERSION=
+ARG HELM_VERSION=
+ARG K9S_VERSION=
+ARG KUBECTX_VERSION=
+ARG STERN_VERSION=
+ARG KIND_VERSION=
 ARG TARGETARCH
 
 # ---------- Environment ----------
@@ -118,6 +124,97 @@ RUN if [ -z "$NATS_CLI_VERSION" ]; then \
     unzip -j /tmp/nats.zip "nats-${NATS_CLI_VERSION}-linux-${NATS_ARCH}/nats" -d /usr/local/bin && \
     chmod +x /usr/local/bin/nats && \
     rm /tmp/nats.zip
+
+# ---------- Kubernetes tooling ----------
+# Operational toolkit for connecting to Kubernetes clusters: the canonical
+# CLI plus daily-driver TUI / log / context utilities. Each layer fetches
+# the latest upstream release at build time; pin individually via the
+# matching `--build-arg <NAME>_VERSION=<x.y.z>` for reproducible builds.
+# All binaries land in /usr/local/bin so they're on PATH for interactive
+# shells, the entrypoint, and SSH sessions. Multi-arch via TARGETARCH.
+# Cluster credentials are NOT baked in — operators populate ~/.kube/config
+# at runtime. Note: ~/.kube is NOT on the kroclaude-config persistent
+# volume (only ~/.claude/ is), so mount a host kubeconfig at runtime or
+# symlink ~/.kube → ~/.claude/kube if you need it to survive restarts.
+
+# kubectl — official binary from dl.k8s.io (no GitHub API rate limit).
+# stable.txt returns "vX.Y.Z"; we strip the leading v and re-add it in
+# the URL. The ${VAR#v} normalization runs on both auto-detect and
+# `--build-arg`-override paths so a v-prefixed override doesn't 404.
+RUN if [ -z "$KUBECTL_VERSION" ]; then \
+    KUBECTL_VERSION=$(curl -fsSL https://dl.k8s.io/release/stable.txt); \
+    fi && \
+    KUBECTL_VERSION=${KUBECTL_VERSION#v} && \
+    K_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "amd64";; esac) && \
+    curl -fsSL -o /usr/local/bin/kubectl \
+    "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${K_ARCH}/kubectl" && \
+    chmod +x /usr/local/bin/kubectl
+
+# helm — upstream install script (handles arch detection + checksum).
+# Lands at /usr/local/bin/helm. DESIRED_VERSION takes the v-prefixed tag;
+# we prepend the v when HELM_VERSION is set so users pass naked x.y.z.
+RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 -o /tmp/get-helm-3 && \
+    chmod +x /tmp/get-helm-3 && \
+    if [ -n "$HELM_VERSION" ]; then \
+    DESIRED_VERSION="v${HELM_VERSION#v}" /tmp/get-helm-3; \
+    else \
+    /tmp/get-helm-3; \
+    fi && \
+    rm /tmp/get-helm-3
+
+# k9s — terminal UI for live cluster inspection (derailed/k9s). Tarball
+# ships the k9s binary at root alongside LICENSE/README.
+RUN if [ -z "$K9S_VERSION" ]; then \
+    K9S_VERSION=$(curl -fsSL https://api.github.com/repos/derailed/k9s/releases/latest | jq -r .tag_name); \
+    fi && \
+    K9S_VERSION=${K9S_VERSION#v} && \
+    K9S_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "amd64";; esac) && \
+    curl -fsSL -o /tmp/k9s.tar.gz \
+    "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linux_${K9S_ARCH}.tar.gz" && \
+    tar -xzf /tmp/k9s.tar.gz -C /usr/local/bin k9s && \
+    chmod +x /usr/local/bin/k9s && \
+    rm /tmp/k9s.tar.gz
+
+# kubectx + kubens — context/namespace switchers (ahmetb/kubectx). Each
+# binary ships in its own tarball; arch naming uses x86_64 (not amd64)
+# on intel but matches on arm64.
+RUN if [ -z "$KUBECTX_VERSION" ]; then \
+    KUBECTX_VERSION=$(curl -fsSL https://api.github.com/repos/ahmetb/kubectx/releases/latest | jq -r .tag_name); \
+    fi && \
+    KUBECTX_VERSION=${KUBECTX_VERSION#v} && \
+    KUBECTX_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "x86_64";; esac) && \
+    curl -fsSL -o /tmp/kubectx.tar.gz \
+    "https://github.com/ahmetb/kubectx/releases/download/v${KUBECTX_VERSION}/kubectx_v${KUBECTX_VERSION}_linux_${KUBECTX_ARCH}.tar.gz" && \
+    tar -xzf /tmp/kubectx.tar.gz -C /usr/local/bin kubectx && \
+    curl -fsSL -o /tmp/kubens.tar.gz \
+    "https://github.com/ahmetb/kubectx/releases/download/v${KUBECTX_VERSION}/kubens_v${KUBECTX_VERSION}_linux_${KUBECTX_ARCH}.tar.gz" && \
+    tar -xzf /tmp/kubens.tar.gz -C /usr/local/bin kubens && \
+    chmod +x /usr/local/bin/kubectx /usr/local/bin/kubens && \
+    rm /tmp/kubectx.tar.gz /tmp/kubens.tar.gz
+
+# stern — multi-pod multi-container log tailer (stern/stern).
+RUN if [ -z "$STERN_VERSION" ]; then \
+    STERN_VERSION=$(curl -fsSL https://api.github.com/repos/stern/stern/releases/latest | jq -r .tag_name); \
+    fi && \
+    STERN_VERSION=${STERN_VERSION#v} && \
+    STERN_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "amd64";; esac) && \
+    curl -fsSL -o /tmp/stern.tar.gz \
+    "https://github.com/stern/stern/releases/download/v${STERN_VERSION}/stern_${STERN_VERSION}_linux_${STERN_ARCH}.tar.gz" && \
+    tar -xzf /tmp/stern.tar.gz -C /usr/local/bin stern && \
+    chmod +x /usr/local/bin/stern && \
+    rm /tmp/stern.tar.gz
+
+# kind — Kubernetes-in-Docker (kubernetes-sigs/kind). Pairs with the dind
+# sidecar in docker-compose.yaml: `kind create cluster` spins up a local
+# control plane without needing a remote cluster. Single binary release.
+RUN if [ -z "$KIND_VERSION" ]; then \
+    KIND_VERSION=$(curl -fsSL https://api.github.com/repos/kubernetes-sigs/kind/releases/latest | jq -r .tag_name); \
+    fi && \
+    KIND_VERSION=${KIND_VERSION#v} && \
+    KIND_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "amd64";; esac) && \
+    curl -fsSL -o /usr/local/bin/kind \
+    "https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-${KIND_ARCH}" && \
+    chmod +x /usr/local/bin/kind
 
 # ---------- bat / fd symlinks (Debian names them batcat / fdfind) + locale ----------
 RUN ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null || true && \

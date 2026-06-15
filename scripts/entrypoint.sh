@@ -84,6 +84,22 @@ install -d -o claude -g claude "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
 # fails silently and VS Code falls back to re-downloading every time.
 install -d -o claude -g claude "$CLAUDE_HOME/.vscode-server"
 
+# ---------- ~/.kube → ~/.claude/kube symlink (idempotent, every boot) ----------
+# kubectl writes its config under ~/.kube/, which would otherwise live
+# in the container's writable layer (no dedicated named volume). Symlink
+# it into $CONFIG_DIR so kubeconfig + cached creds survive on the
+# kroclaude-config volume — same pattern as the ~/.claude.json symlink
+# at the top of this script. Migrate any pre-existing real ~/.kube/ dir
+# from an upgrade scenario before laying down the symlink.
+install -d -o claude -g claude "$CONFIG_DIR/kube"
+if [ -d "$CLAUDE_HOME/.kube" ] && [ ! -L "$CLAUDE_HOME/.kube" ]; then
+    cp -an "$CLAUDE_HOME/.kube/." "$CONFIG_DIR/kube/" 2>/dev/null || true
+    rm -rf "$CLAUDE_HOME/.kube"
+    chown -R claude:claude "$CONFIG_DIR/kube"
+fi
+ln -sfn "$CONFIG_DIR/kube" "$CLAUDE_HOME/.kube"
+chown -h claude:claude "$CLAUDE_HOME/.kube"
+
 # ============================================================================
 # Bundled customization reflection (feature 005-config-bundling)
 # ----------------------------------------------------------------------------

@@ -17,7 +17,7 @@ services:
         "[ -s /workspace/.omc-workspace ] || echo '{}' > /workspace/.omc-workspace && chmod 0644 /workspace/.omc-workspace",
       ]
     volumes:
-      - workspace:/workspace
+      - kroclaude-workspace:/workspace
     restart: "no"
   kroclaude:
     build:
