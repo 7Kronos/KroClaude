@@ -10,6 +10,7 @@ LABEL org.opencontainers.image.description="Claude Code shell environment"
 # e.g. `--build-arg S6_OVERLAY_VERSION=3.2.0.2`.
 ARG S6_OVERLAY_VERSION=
 ARG NATS_CLI_VERSION=
+ARG SUPABASE_VERSION=
 ARG KUBECTL_VERSION=
 ARG HELM_VERSION=
 ARG K9S_VERSION=
@@ -124,6 +125,25 @@ RUN if [ -z "$NATS_CLI_VERSION" ]; then \
     unzip -j /tmp/nats.zip "nats-${NATS_CLI_VERSION}-linux-${NATS_ARCH}/nats" -d /usr/local/bin && \
     chmod +x /usr/local/bin/nats && \
     rm /tmp/nats.zip
+
+# ---------- Supabase CLI ----------
+# https://github.com/supabase/cli — local-dev CLI for Supabase projects
+# (db migrations, edge functions, type generation). Multi-arch via
+# TARGETARCH. Defaults to the latest GitHub release at build time; pin
+# via `--build-arg SUPABASE_VERSION=<x.y.z>` for reproducible builds.
+# Release tarball is `supabase_<ver>_linux_<arch>.tar.gz` and ships the
+# `supabase` binary at root. ${VAR#v} normalization on both auto-detect
+# and override paths so a v-prefixed override doesn't 404.
+RUN if [ -z "$SUPABASE_VERSION" ]; then \
+    SUPABASE_VERSION=$(curl -fsSL https://api.github.com/repos/supabase/cli/releases/latest | jq -r .tag_name); \
+    fi && \
+    SUPABASE_VERSION=${SUPABASE_VERSION#v} && \
+    SUPABASE_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "amd64";; esac) && \
+    curl -fsSL -o /tmp/supabase.tar.gz \
+    "https://github.com/supabase/cli/releases/download/v${SUPABASE_VERSION}/supabase_${SUPABASE_VERSION}_linux_${SUPABASE_ARCH}.tar.gz" && \
+    tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin supabase && \
+    chmod +x /usr/local/bin/supabase && \
+    rm /tmp/supabase.tar.gz
 
 # ---------- Kubernetes tooling ----------
 # Operational toolkit for connecting to Kubernetes clusters: the canonical
