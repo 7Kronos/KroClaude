@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl wget jq ripgrep fd-find unzip zip tree tmux fzf bat sudo bubblewrap \
     # Build & language toolchain (Node provided by base image)
     build-essential pkg-config python3 python3-pip python3-venv pipx \
+    ruby-full \
     # .NET runtime dep (libssl3 / libstdc++6 / zlib1g already pulled by base)
     libicu76 \
     # Browser automation stack (FR-003b)
