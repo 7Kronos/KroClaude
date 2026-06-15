@@ -6,6 +6,19 @@
 # ==============================================================================
 
 services:
+  # One-shot: guarantees the OMC shared-state marker on the /workspace volume.
+  # Idempotent and host-path-free, so it works on fresh volumes and every restart.
+  omc-init:
+    image: busybox
+    command:
+      [
+        "sh",
+        "-c",
+        "[ -e /workspace/.omc-workspace ] || install -m 0644 /dev/null /workspace/.omc-workspace",
+      ]
+    volumes:
+      - workspace:/workspace
+    restart: "no"
   kroclaude:
     build:
       context: .
@@ -61,6 +74,10 @@ services:
     ports:
       # Feature 003 — SSH access. Host port overridable via env.
       - "${KROCLAUDE_SSH_HOST_PORT:-2221}:2221"
+
+    depends_on:
+      omc-init:
+        condition: service_completed_successfully
 
     volumes:
       - kroclaude-config:/home/claude/.claude

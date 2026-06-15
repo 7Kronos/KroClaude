@@ -95,6 +95,12 @@
       "type": "file"
     },
     {
+      "path": "docker-compose.yaml",
+      "accessCount": 2,
+      "lastAccessed": 1781553850686,
+      "type": "file"
+    },
+    {
       "path": "Dockerfile",
       "accessCount": 1,
       "lastAccessed": 1781551408596,
