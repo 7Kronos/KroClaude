@@ -84,21 +84,42 @@ install -d -o claude -g claude "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
 # fails silently and VS Code falls back to re-downloading every time.
 install -d -o claude -g claude "$CLAUDE_HOME/.vscode-server"
 
-# ---------- ~/.kube → ~/.claude/kube symlink (idempotent, every boot) ----------
-# kubectl writes its config under ~/.kube/, which would otherwise live
-# in the container's writable layer (no dedicated named volume). Symlink
-# it into $CONFIG_DIR so kubeconfig + cached creds survive on the
-# kroclaude-config volume — same pattern as the ~/.claude.json symlink
-# at the top of this script. Migrate any pre-existing real ~/.kube/ dir
-# from an upgrade scenario before laying down the symlink.
-install -d -o claude -g claude "$CONFIG_DIR/kube"
-if [ -d "$CLAUDE_HOME/.kube" ] && [ ! -L "$CLAUDE_HOME/.kube" ]; then
-    cp -an "$CLAUDE_HOME/.kube/." "$CONFIG_DIR/kube/" 2>/dev/null || true
-    rm -rf "$CLAUDE_HOME/.kube"
-    chown -R claude:claude "$CONFIG_DIR/kube"
-fi
-ln -sfn "$CONFIG_DIR/kube" "$CLAUDE_HOME/.kube"
-chown -h claude:claude "$CLAUDE_HOME/.kube"
+# ---------- Per-CLI persistent dotdir symlinks (idempotent, every boot) ----------
+# CLIs whose dotdirs aren't covered by a dedicated named volume get
+# symlinked into $CONFIG_DIR (which IS on the kroclaude-config volume),
+# so auth tokens + caches survive container recreation without adding a
+# volume per CLI. Same approach as the ~/.claude.json symlink near the
+# top of this script, generalized.
+#
+# Function args:
+#   $1 = target subdir under $CONFIG_DIR (e.g. "kube")
+#   $2 = override symlink path (default: $CLAUDE_HOME/.$1; needed for
+#        XDG paths like ~/.config/helm where parent ≠ $CLAUDE_HOME)
+#
+# On upgrade from a prior image where the path was a real dir, contents
+# are migrated into the persistent target before the symlink is laid
+# down. Idempotent: `ln -sfn` atomically replaces an existing symlink.
+persist_dotdir() {
+    local name="$1"
+    local symlink="${2:-$CLAUDE_HOME/.$name}"
+    local target="$CONFIG_DIR/$name"
+    install -d -o claude -g claude "$target" "$(dirname "$symlink")"
+    if [ -d "$symlink" ] && [ ! -L "$symlink" ]; then
+        cp -an "$symlink/." "$target/" 2>/dev/null || true
+        rm -rf "$symlink"
+        chown -R claude:claude "$target"
+    fi
+    ln -sfn "$target" "$symlink"
+    chown -h claude:claude "$symlink"
+}
+
+persist_dotdir kube                                            # kubectl
+persist_dotdir supabase                                        # supabase login token
+persist_dotdir docker                                          # docker login auth (~/.docker/config.json)
+persist_dotdir helm-config "$CLAUDE_HOME/.config/helm"         # helm repos + plugins
+persist_dotdir helm-cache  "$CLAUDE_HOME/.cache/helm"          # helm chart cache
+persist_dotdir k9s         "$CLAUDE_HOME/.config/k9s"          # k9s config + skins
+persist_dotdir nats        "$CLAUDE_HOME/.config/nats"         # nats contexts (auth)
 
 # ============================================================================
 # Bundled customization reflection (feature 005-config-bundling)
