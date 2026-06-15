@@ -68,6 +68,17 @@ for src in "$SOURCE_DIR"/per-cli/codex/* "$SOURCE_DIR"/per-cli/gemini/*; do
     [ -f "$dest" ] || cp "$src" "$dest"
 done
 
+# Starship config lives at ~/.config/starship.toml (XDG path), not
+# ~/.starship/, so the codex/gemini loop above doesn't fit. Seed it
+# directly with the same create-if-missing semantics.
+install -d -o claude -g claude "$CLAUDE_HOME/.config"
+if [ -f "$SOURCE_DIR/per-cli/starship/starship.toml" ] && \
+   [ ! -f "$CLAUDE_HOME/.config/starship.toml" ]; then
+    install -m 0644 -o claude -g claude \
+        "$SOURCE_DIR/per-cli/starship/starship.toml" \
+        "$CLAUDE_HOME/.config/starship.toml"
+fi
+
 # ---------- ~/.config/gh ownership (idempotent, every boot) ----------
 # Docker creates the named-volume mount target as root:root when the
 # volume is empty (first boot) — gh runs as claude and can't write
