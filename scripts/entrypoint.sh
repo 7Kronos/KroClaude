@@ -230,6 +230,7 @@ merge_fragments "$SOURCE_DIR/mcp-servers.d" "$CONFIG_DIR/.mcp.json"     "$MCP_ME
 # Marketplaces: add (no-op once present), then update all to pull latest manifests.
 runuser -u claude -- claude plugin marketplace add github:anthropics/claude-plugins-official >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace add github:thedotmack/claude-mem >/dev/null 2>&1 || true
+runuser -u claude -- claude plugin marketplace add github:Yeachan-Heo/oh-my-claudecode >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace update \
     || echo "[entrypoint] WARN: failed to update marketplaces" >&2
 
@@ -237,7 +238,8 @@ runuser -u claude -- claude plugin marketplace update \
 for p in csharp-lsp@claude-plugins-official \
          commit-commands@claude-plugins-official \
          feature-dev@claude-plugins-official \
-         claude-mem@claude-mem; do
+         claude-mem@claude-mem \
+         oh-my-claudecode@oh-my-claudecode; do
     runuser -u claude -- claude plugin install "$p" >/dev/null 2>&1 \
         || echo "[entrypoint] WARN: failed to install plugin $p" >&2
     runuser -u claude -- claude plugin update "${p%@*}" >/dev/null 2>&1 || true

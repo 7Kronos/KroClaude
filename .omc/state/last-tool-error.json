@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"ls -la /home/krs/Repos/KroClaude/config/plugins/ && echo \\\"---\\\" && cat /home/krs/Repos/KroClaude/config/plugins/*.json 2>/dev/null\",\"description\":\"Inspect plugins directory contents\"}",
+  "error": "Exit code 1\n.rw-r--r-- 0 krs 28 Apr 15:12  .gitkeep\n---\n(eval):1: no matches found: /home/krs/Repos/KroClaude/config/plugins/*.json",
+  "timestamp": "2026-06-15T19:23:38.250Z",
+  "retry_count": 1
+}

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1779310119737,
+  "lastScanned": 1781551315082,
   "projectRoot": "/home/krs/Repos/KroClaude",
   "techStack": {
     "languages": [],
@@ -39,7 +39,7 @@
       "path": "config",
       "purpose": "Configuration files",
       "fileCount": 3,
-      "lastAccessed": 1779310119732,
+      "lastAccessed": 1781551315077,
       "keyFiles": [
         "CLAUDE.md",
         "claude-powerline.json",
@@ -50,14 +50,14 @@
       "path": "s6-overlay",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1779310119733,
+      "lastAccessed": 1781551315078,
       "keyFiles": []
     },
     "scripts": {
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 4,
-      "lastAccessed": 1779310119734,
+      "lastAccessed": 1781551315079,
       "keyFiles": [
         "entrypoint.sh",
         "notify.py",
@@ -69,24 +69,43 @@
       "path": "skills",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1779310119735,
+      "lastAccessed": 1781551315080,
       "keyFiles": []
     },
     "specs": {
       "path": "specs",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1779310119735,
+      "lastAccessed": 1781551315080,
       "keyFiles": []
     },
     "tests": {
       "path": "tests",
       "purpose": "Test files",
       "fileCount": 0,
-      "lastAccessed": 1779310119735,
+      "lastAccessed": 1781551315080,
       "keyFiles": []
     }
   },
-  "hotPaths": [],
+  "hotPaths": [
+    {
+      "path": "scripts/entrypoint.sh",
+      "accessCount": 2,
+      "lastAccessed": 1781551437515,
+      "type": "file"
+    },
+    {
+      "path": "Dockerfile",
+      "accessCount": 1,
+      "lastAccessed": 1781551408596,
+      "type": "file"
+    },
+    {
+      "path": "specs/005-config-bundling/plan.md",
+      "accessCount": 1,
+      "lastAccessed": 1781551408774,
+      "type": "file"
+    }
+  ],
   "userDirectives": []
 }
