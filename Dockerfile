@@ -160,7 +160,8 @@ RUN npm i -g \
     lighthouse \
     @owloops/claude-powerline \
     @google/gemini-cli \
-    @openai/codex
+    @openai/codex \
+    oh-my-claude-sisyphus
 
 # ---------- uv (Astral standalone installer — self-contained binary) ----------
 # Installed as the recommended path per Astral's docs (avoids polluting
