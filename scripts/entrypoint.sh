@@ -116,10 +116,11 @@ persist_dotdir() {
 persist_dotdir kube                                            # kubectl
 persist_dotdir supabase                                        # supabase login token
 persist_dotdir docker                                          # docker login auth (~/.docker/config.json)
-persist_dotdir helm-config "$CLAUDE_HOME/.config/helm"         # helm repos + plugins
-persist_dotdir helm-cache  "$CLAUDE_HOME/.cache/helm"          # helm chart cache
-persist_dotdir k9s         "$CLAUDE_HOME/.config/k9s"          # k9s config + skins
 persist_dotdir nats        "$CLAUDE_HOME/.config/nats"         # nats contexts (auth)
+
+# helm + k9s persist via env-var redirects (HELM_*_HOME, K9S_CONFIG_DIR)
+# set in Dockerfile ENV and propagated via /etc/environment regen below
+# — no symlink needed since those CLIs honor their own dotdir overrides.
 
 # ============================================================================
 # Bundled customization reflection (feature 005-config-bundling)
@@ -352,6 +353,13 @@ chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
 {
     printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n'
     printf 'DOCKER_HOST="tcp://localhost:2375"\n'
+    # CLI dotdir redirects onto the kroclaude-config volume. Static
+    # (no compose-supplied source) — kept inline next to PATH so SSH
+    # login shells see them regardless of compose env state.
+    printf 'HELM_CONFIG_HOME="/home/claude/.claude/helm-config"\n'
+    printf 'HELM_CACHE_HOME="/home/claude/.claude/helm-cache"\n'
+    printf 'HELM_DATA_HOME="/home/claude/.claude/helm-data"\n'
+    printf 'K9S_CONFIG_DIR="/home/claude/.claude/k9s"\n'
     for var in ANTHROPIC_API_KEY TZ GIT_USER_NAME GIT_USER_EMAIL \
                NODE_OPTIONS NOTIFY_URLS \
                EXA_API_KEY GITHUB_PERSONAL_ACCESS_TOKEN \
