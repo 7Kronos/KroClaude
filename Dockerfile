@@ -71,6 +71,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Shell ergonomics (cherry-picked from dotfiles/home.nix — starship
     # installed separately below since trixie's package is too old)
     zsh direnv zoxide eza btop git-delta lazygit \
+    # Language servers (C / C++ — clangd). Other LSPs install via npm
+    # and gem below; csharp-ls via dotnet tool further down.
+    clangd \
     # Build & language toolchain (Node provided by base image)
     build-essential pkg-config python3 python3-pip python3-venv pipx \
     ruby-full \
@@ -292,7 +295,13 @@ RUN npm i -g \
     @owloops/claude-powerline \
     @google/gemini-cli \
     @openai/codex \
-    oh-my-claude-sisyphus
+    oh-my-claude-sisyphus \
+    typescript-language-server \
+    pyright \
+    bash-language-server \
+    yaml-language-server \
+    vscode-langservers-extracted \
+    dockerfile-language-server-nodejs
 
 # ---------- uv (Astral standalone installer — self-contained binary) ----------
 # Installed as the recommended path per Astral's docs (avoids polluting
@@ -333,6 +342,12 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
 # SSH sessions); `--global` would land in /root/.dotnet/tools and miss the
 # claude user. Always installs the latest release at build time.
 RUN dotnet tool install csharp-ls --tool-path /usr/local/bin
+
+# ---------- ruby-lsp (Ruby language server, Shopify) ----------
+# Installed system-wide via the ruby-full gem env from the apt block.
+# `--no-document` skips rdoc/ri generation to keep the layer small.
+# Binary stub lands on PATH via the gem environment's default bin dir.
+RUN gem install --no-document ruby-lsp
 
 # ---------- Python packages (FR-003) ----------
 RUN pip install --no-cache-dir --break-system-packages \
