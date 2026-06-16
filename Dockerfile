@@ -17,6 +17,7 @@ ARG K9S_VERSION=
 ARG KUBECTX_VERSION=
 ARG STERN_VERSION=
 ARG KIND_VERSION=
+ARG OMNISHARP_VERSION=
 ARG TARGETARCH
 
 # ---------- Environment ----------
@@ -334,14 +335,28 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
     rm /tmp/dotnet-install.sh && \
     ln -sf "$DOTNET_ROOT/dotnet" /usr/local/bin/dotnet
 
-# ---------- csharp-ls (.NET global tool, used by the bundled csharp-lsp plugin) ----------
-# Installed via `dotnet tool install` rather than the standalone OmniSharp-Roslyn
-# tarball because the `csharp-lsp` plugin in marketplace.json shells out to the
-# `csharp-ls` binary (razzmatazz/csharp-language-server). `--tool-path` installs
-# system-wide into /usr/local/bin (already on PATH for claude, entrypoint, and
-# SSH sessions); `--global` would land in /root/.dotnet/tools and miss the
-# claude user. Always installs the latest release at build time.
-RUN dotnet tool install csharp-ls --tool-path /usr/local/bin
+# ---------- OmniSharp (.NET LSP, used by the OMC csharp plugin) ----------
+# OmniSharp-Roslyn (OmniSharp/omnisharp-roslyn) replaces the prior
+# csharp-ls install because the OMC csharp plugin shells out to the
+# `omnisharp` binary. The net6.0 build's runtimeconfig.json declares
+# `rollForward: LatestMajor`, so it runs on the .NET 9/10/11 already
+# installed above without needing a separate .NET 6 runtime in the
+# image. Tarball extracts a flat dir of dlls + an `OmniSharp` launcher;
+# we drop the dir under /usr/local/share/omnisharp/ and symlink the
+# launcher to /usr/local/bin/omnisharp so it's on PATH. Latest at
+# build time; pin via `--build-arg OMNISHARP_VERSION=<x.y.z>`.
+RUN if [ -z "$OMNISHARP_VERSION" ]; then \
+    OMNISHARP_VERSION=$(curl -fsSL https://api.github.com/repos/OmniSharp/omnisharp-roslyn/releases/latest | jq -r .tag_name); \
+    fi && \
+    OMNISHARP_VERSION=${OMNISHARP_VERSION#v} && \
+    OMNI_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "x64";; esac) && \
+    curl -fsSL -o /tmp/omnisharp.tar.gz \
+    "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v${OMNISHARP_VERSION}/omnisharp-linux-${OMNI_ARCH}-net6.0.tar.gz" && \
+    install -d /usr/local/share/omnisharp && \
+    tar -xzf /tmp/omnisharp.tar.gz -C /usr/local/share/omnisharp && \
+    chmod +x /usr/local/share/omnisharp/OmniSharp && \
+    ln -sf /usr/local/share/omnisharp/OmniSharp /usr/local/bin/omnisharp && \
+    rm /tmp/omnisharp.tar.gz
 
 # ---------- ruby-lsp (Ruby language server, Shopify) ----------
 # Installed system-wide via the ruby-full gem env from the apt block.
