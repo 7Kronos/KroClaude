@@ -302,7 +302,9 @@ RUN npm i -g \
     bash-language-server \
     yaml-language-server \
     vscode-langservers-extracted \
-    dockerfile-language-server-nodejs
+    dockerfile-language-server-nodejs \
+    @astrojs/language-server \
+    @vue/language-server
 
 # ---------- uv (Astral standalone installer — self-contained binary) ----------
 # Installed as the recommended path per Astral's docs (avoids polluting
@@ -380,7 +382,8 @@ RUN pip install --no-cache-dir --break-system-packages \
     rich click tqdm \
     playwright \
     apprise \
-    xlsxwriter
+    xlsxwriter \
+    python-lsp-server
 
 # ---------- s6-overlay service definitions ----------
 COPY s6-overlay/s6-rc.d/xvfb/type /etc/s6-overlay/s6-rc.d/xvfb/type
