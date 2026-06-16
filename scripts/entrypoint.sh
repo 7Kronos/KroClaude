@@ -230,6 +230,7 @@ merge_fragments "$SOURCE_DIR/mcp-servers.d" "$CONFIG_DIR/.mcp.json"     "$MCP_ME
 # Marketplaces: add (no-op once present), then update all to pull latest manifests.
 runuser -u claude -- claude plugin marketplace add github:anthropics/claude-plugins-official >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace add github:thedotmack/claude-mem >/dev/null 2>&1 || true
+runuser -u claude -- claude plugin marketplace add github:7Kronos/gravity >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace update \
     || echo "[entrypoint] WARN: failed to update marketplaces" >&2
 
@@ -237,7 +238,8 @@ runuser -u claude -- claude plugin marketplace update \
 for p in csharp-lsp@claude-plugins-official \
          commit-commands@claude-plugins-official \
          feature-dev@claude-plugins-official \
-         claude-mem@claude-mem; do
+         claude-mem@claude-mem \
+         gravity-dsl@gravity; do
     runuser -u claude -- claude plugin install "$p" >/dev/null 2>&1 \
         || echo "[entrypoint] WARN: failed to install plugin $p" >&2
     runuser -u claude -- claude plugin update "${p%@*}" >/dev/null 2>&1 || true
@@ -305,15 +307,30 @@ chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
 # from /etc/environment (via pam_env, UsePAM yes), /etc/profile, and the
 # user's shell rc files. To make compose-supplied runtime vars visible to
 # SSH login shells, regenerate /etc/environment from an explicit allowlist
-# on every boot. Source of truth for the list: docker-compose.yaml
-# `environment:`. Empty values are skipped so unset vars don't show up as
-# empty strings in the shell. /etc/environment is mode 0644 (world-readable)
-# by pam_env requirement — acceptable in this single-user container, but
-# do not add vars here that must be hidden from non-claude processes.
+# on every boot. The list is a SUBSET of docker-compose.yaml `environment:`
+# minus secrets — see DELIBERATELY EXCLUDED below. Empty values are
+# skipped so unset vars don't show up as empty strings in the shell.
+# /etc/environment is mode 0644 (world-readable) by pam_env requirement —
+# acceptable in this single-user container, but do not add vars here that
+# must be hidden from non-claude processes.
+#
+# DELIBERATELY EXCLUDED:
+#   - ANTHROPIC_API_KEY: claude-code's auth precedence treats this env var
+#     as overriding the persisted OAuth login (~/.claude/.credentials.json).
+#     Propagating it to SSH login shells made `claude login` appear not to
+#     persist across container restarts — the saved OAuth was silently
+#     bypassed in favour of the API key. PID 1 still has it (compose
+#     environment), so any `claude` started under s6 or via `docker exec`
+#     still falls back to it when no OAuth login is persisted.
+#
+# All other secrets stay in this list because MCP server fragments under
+# config/mcp-servers.d/ reference them as ${VAR} placeholders that
+# claude-code expands from the shell env at MCP-spawn time — login shells
+# need them present to bring the MCP servers up.
 {
     printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n'
     printf 'DOCKER_HOST="tcp://localhost:2375"\n'
-    for var in ANTHROPIC_API_KEY TZ GIT_USER_NAME GIT_USER_EMAIL \
+    for var in TZ GIT_USER_NAME GIT_USER_EMAIL \
                NODE_OPTIONS NOTIFY_URLS \
                EXA_API_KEY GITHUB_PERSONAL_ACCESS_TOKEN \
                NUGET_REGISTRY_USER NUGET_REGISTRY_TOKEN; do
