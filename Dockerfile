@@ -358,6 +358,12 @@ RUN if [ -z "$OMNISHARP_VERSION" ]; then \
     ln -sf /usr/local/share/omnisharp/OmniSharp /usr/local/bin/omnisharp && \
     rm /tmp/omnisharp.tar.gz
 
+# ---------- csharp-ls (alternate .NET LSP) ----------
+# Kept alongside OmniSharp so the upstream `csharp-lsp@claude-plugins-
+# official` plugin (which shells out to `csharp-ls`) keeps working.
+# Different binary name, no conflict with the omnisharp install above.
+RUN dotnet tool install csharp-ls --tool-path /usr/local/bin
+
 # ---------- ruby-lsp (Ruby language server, Shopify) ----------
 # Installed system-wide via the ruby-full gem env from the apt block.
 # `--no-document` skips rdoc/ri generation to keep the layer small.
