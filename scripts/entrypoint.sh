@@ -68,6 +68,17 @@ for src in "$SOURCE_DIR"/per-cli/codex/* "$SOURCE_DIR"/per-cli/gemini/*; do
     [ -f "$dest" ] || cp "$src" "$dest"
 done
 
+# Starship config lives at ~/.config/starship.toml (XDG path), not
+# ~/.starship/, so the codex/gemini loop above doesn't fit. Seed it
+# directly with the same create-if-missing semantics.
+install -d -o claude -g claude "$CLAUDE_HOME/.config"
+if [ -f "$SOURCE_DIR/per-cli/starship/starship.toml" ] && \
+   [ ! -f "$CLAUDE_HOME/.config/starship.toml" ]; then
+    install -m 0644 -o claude -g claude \
+        "$SOURCE_DIR/per-cli/starship/starship.toml" \
+        "$CLAUDE_HOME/.config/starship.toml"
+fi
+
 # ---------- ~/.config/gh ownership (idempotent, every boot) ----------
 # Docker creates the named-volume mount target as root:root when the
 # volume is empty (first boot) — gh runs as claude and can't write
@@ -83,6 +94,44 @@ install -d -o claude -g claude "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
 # extensions here; without the chown, the first connect after a wipe
 # fails silently and VS Code falls back to re-downloading every time.
 install -d -o claude -g claude "$CLAUDE_HOME/.vscode-server"
+
+# ---------- Per-CLI persistent dotdir symlinks (idempotent, every boot) ----------
+# CLIs whose dotdirs aren't covered by a dedicated named volume get
+# symlinked into $CONFIG_DIR (which IS on the kroclaude-config volume),
+# so auth tokens + caches survive container recreation without adding a
+# volume per CLI. Same approach as the ~/.claude.json symlink near the
+# top of this script, generalized.
+#
+# Function args:
+#   $1 = target subdir under $CONFIG_DIR (e.g. "kube")
+#   $2 = override symlink path (default: $CLAUDE_HOME/.$1; needed for
+#        XDG paths like ~/.config/helm where parent ≠ $CLAUDE_HOME)
+#
+# On upgrade from a prior image where the path was a real dir, contents
+# are migrated into the persistent target before the symlink is laid
+# down. Idempotent: `ln -sfn` atomically replaces an existing symlink.
+persist_dotdir() {
+    local name="$1"
+    local symlink="${2:-$CLAUDE_HOME/.$name}"
+    local target="$CONFIG_DIR/$name"
+    install -d -o claude -g claude "$target" "$(dirname "$symlink")"
+    if [ -d "$symlink" ] && [ ! -L "$symlink" ]; then
+        cp -an "$symlink/." "$target/" 2>/dev/null || true
+        rm -rf "$symlink"
+        chown -R claude:claude "$target"
+    fi
+    ln -sfn "$target" "$symlink"
+    chown -h claude:claude "$symlink"
+}
+
+persist_dotdir kube                                            # kubectl
+persist_dotdir supabase                                        # supabase login token
+persist_dotdir docker                                          # docker login auth (~/.docker/config.json)
+persist_dotdir nats        "$CLAUDE_HOME/.config/nats"         # nats contexts (auth)
+
+# helm + k9s persist via env-var redirects (HELM_*_HOME, K9S_CONFIG_DIR)
+# set in Dockerfile ENV and propagated via /etc/environment regen below
+# — no symlink needed since those CLIs honor their own dotdir overrides.
 
 # ============================================================================
 # Bundled customization reflection (feature 005-config-bundling)
@@ -230,6 +279,7 @@ merge_fragments "$SOURCE_DIR/mcp-servers.d" "$CONFIG_DIR/.mcp.json"     "$MCP_ME
 # Marketplaces: add (no-op once present), then update all to pull latest manifests.
 runuser -u claude -- claude plugin marketplace add github:anthropics/claude-plugins-official >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace add github:thedotmack/claude-mem >/dev/null 2>&1 || true
+runuser -u claude -- claude plugin marketplace add github:Yeachan-Heo/oh-my-claudecode >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace add github:7Kronos/gravity >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace update \
     || echo "[entrypoint] WARN: failed to update marketplaces" >&2
@@ -239,6 +289,7 @@ for p in csharp-lsp@claude-plugins-official \
          commit-commands@claude-plugins-official \
          feature-dev@claude-plugins-official \
          claude-mem@claude-mem \
+         oh-my-claudecode@oh-my-claudecode \
          gravity-dsl@gravity; do
     runuser -u claude -- claude plugin install "$p" >/dev/null 2>&1 \
         || echo "[entrypoint] WARN: failed to install plugin $p" >&2
@@ -330,6 +381,13 @@ chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
 {
     printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n'
     printf 'DOCKER_HOST="tcp://localhost:2375"\n'
+    # CLI dotdir redirects onto the kroclaude-config volume. Static
+    # (no compose-supplied source) — kept inline next to PATH so SSH
+    # login shells see them regardless of compose env state.
+    printf 'HELM_CONFIG_HOME="/home/claude/.claude/helm-config"\n'
+    printf 'HELM_CACHE_HOME="/home/claude/.claude/helm-cache"\n'
+    printf 'HELM_DATA_HOME="/home/claude/.claude/helm-data"\n'
+    printf 'K9S_CONFIG_DIR="/home/claude/.claude/k9s"\n'
     for var in TZ GIT_USER_NAME GIT_USER_EMAIL \
                NODE_OPTIONS NOTIFY_URLS \
                EXA_API_KEY GITHUB_PERSONAL_ACCESS_TOKEN \
