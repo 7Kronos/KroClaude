@@ -28,10 +28,6 @@ if [ ! -f "$SENTINEL" ]; then
         cp "$SOURCE_DIR/$f" "$CONFIG_DIR/$f"
     done
 
-    runuser -u claude -- git config --global safe.directory /workspace
-    runuser -u claude -- git config --global user.name  "${GIT_USER_NAME:-KroClaude User}"
-    runuser -u claude -- git config --global user.email "${GIT_USER_EMAIL:-noreply@kroclaude.local}"
-
     touch "$SENTINEL"
     echo "[entrypoint] First-boot seed complete."
 fi
@@ -48,6 +44,34 @@ if [ ! -L "$CLAUDE_HOME/.claude.json" ] || \
 fi
 if [ ! -f "$CONFIG_DIR/.claude.json" ]; then
     echo '{"hasCompletedOnboarding":true,"installMethod":"native"}' > "$CONFIG_DIR/.claude.json"
+fi
+
+# ---------- git identity (idempotent, every boot) ----------
+# HOME is NOT on a volume — only ~/.claude is. A first-boot-only
+# `git config --global` writes to ~/.gitconfig in the throwaway container
+# layer and is lost on the next container recreation, even though the
+# bootstrap sentinel survives in the volume (so the seed never re-runs).
+# That is why git "forgets" user.name/user.email after a redeploy.
+# Fix: symlink ~/.gitconfig onto the kroclaude-config volume (same pattern
+# as ~/.claude.json above) so identity AND manual `git config` edits
+# persist. git's lockfile resolves the symlink, writing through to the
+# volume target instead of replacing the link.
+# Precedence: GIT_USER_* env wins when set (latest deploy wins); else keep
+# an existing persisted value; else seed a default.
+ln -sfn "$CONFIG_DIR/.gitconfig" "$CLAUDE_HOME/.gitconfig"
+[ -f "$CONFIG_DIR/.gitconfig" ] || install -m 0644 -o claude -g claude /dev/null "$CONFIG_DIR/.gitconfig"
+chown -h claude:claude "$CLAUDE_HOME/.gitconfig"
+runuser -u claude -- git config --global --get-all safe.directory 2>/dev/null | grep -qxF /workspace \
+    || runuser -u claude -- git config --global --add safe.directory /workspace
+if [ -n "${GIT_USER_NAME:-}" ]; then
+    runuser -u claude -- git config --global user.name "$GIT_USER_NAME"
+elif [ -z "$(runuser -u claude -- git config --global user.name 2>/dev/null)" ]; then
+    runuser -u claude -- git config --global user.name "KroClaude User"
+fi
+if [ -n "${GIT_USER_EMAIL:-}" ]; then
+    runuser -u claude -- git config --global user.email "$GIT_USER_EMAIL"
+elif [ -z "$(runuser -u claude -- git config --global user.email 2>/dev/null)" ]; then
+    runuser -u claude -- git config --global user.email "noreply@kroclaude.local"
 fi
 
 # ---------- Per-CLI dotdir seeding (idempotent, every boot) ----------
