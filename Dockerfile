@@ -385,6 +385,22 @@ RUN pip install --no-cache-dir --break-system-packages \
     xlsxwriter \
     python-lsp-server
 
+# ---------- graphify (knowledge-graph skill + CLI) ----------
+# https://github.com/safishamsi/graphify — turns any input (code, docs,
+# papers, images) into a navigable knowledge graph with community
+# detection. The PyPI distribution is `graphifyy` (double-y); it exposes
+# the `graphify` console script that the bundled /graphify skill
+# (config/skills/graphify/) shells out to. Installing it here means the
+# skill's Step-1 `import graphify` probe succeeds with no runtime pip
+# install. Pulls tree-sitter language bindings + networkx/graspologic.
+# PINNED (unlike the unpinned Python-packages layer above) because the
+# vendored SKILL.md is frozen against this release and imports PRIVATE
+# internals (`graphify.detect`, `graphify.extract`) that carry no
+# stability guarantee — an unpinned bump could break the skill silently.
+# When bumping this pin, re-vendor config/skills/graphify/SKILL.md from
+# the matching upstream tag. Same `--break-system-packages` as above.
+RUN pip install --no-cache-dir --break-system-packages graphifyy==0.9.4
+
 # ---------- s6-overlay service definitions ----------
 COPY s6-overlay/s6-rc.d/xvfb/type /etc/s6-overlay/s6-rc.d/xvfb/type
 COPY s6-overlay/s6-rc.d/xvfb/run  /etc/s6-overlay/s6-rc.d/xvfb/run
