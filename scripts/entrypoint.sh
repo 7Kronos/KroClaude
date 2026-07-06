@@ -300,11 +300,25 @@ merge_fragments "$SOURCE_DIR/mcp-servers.d" "$CONFIG_DIR/.mcp.json"     "$MCP_ME
 # does the real refresh, MCPs are remove+re-add so env-var changes from
 # the deployment propagate. Per-item failure is non-fatal (FR-009).
 
+# Git/gh auth for private plugin repos (e.g. 7Kronos/call-me-pilot).
+# Reuse the deployment-supplied PAT: point git's credential helper at gh
+# (`gh auth git-credential` reads GH_TOKEN at run time, so no secret is
+# written into ~/.gitconfig). Enables the private `marketplace add`,
+# `plugin install cmpilot@call-me-pilot`, and call-me-pilot install.sh
+# clone below. No token -> skipped, and those private steps then fail
+# non-fatally like any other (FR-009). Public marketplaces are unaffected.
+if [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
+    export GH_TOKEN="$GITHUB_PERSONAL_ACCESS_TOKEN"
+    runuser -u claude -- env GH_TOKEN="$GH_TOKEN" gh auth setup-git >/dev/null 2>&1 \
+        || echo "[entrypoint] WARN: gh auth setup-git failed; private plugins may not install" >&2
+fi
+
 # Marketplaces: add (no-op once present), then update all to pull latest manifests.
 runuser -u claude -- claude plugin marketplace add github:anthropics/claude-plugins-official >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace add github:thedotmack/claude-mem >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace add github:Yeachan-Heo/oh-my-claudecode >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace add github:7Kronos/gravity >/dev/null 2>&1 || true
+runuser -u claude -- claude plugin marketplace add github:7Kronos/call-me-pilot >/dev/null 2>&1 || true
 runuser -u claude -- claude plugin marketplace update \
     || echo "[entrypoint] WARN: failed to update marketplaces" >&2
 
@@ -314,11 +328,25 @@ for p in csharp-lsp@claude-plugins-official \
          feature-dev@claude-plugins-official \
          claude-mem@claude-mem \
          oh-my-claudecode@oh-my-claudecode \
-         gravity-dsl@gravity; do
+         gravity-dsl@gravity \
+         cmpilot@call-me-pilot; do
     runuser -u claude -- claude plugin install "$p" >/dev/null 2>&1 \
         || echo "[entrypoint] WARN: failed to install plugin $p" >&2
     runuser -u claude -- claude plugin update "${p%@*}" >/dev/null 2>&1 || true
 done
+
+# call-me-pilot standalone CLI (private 7Kronos repo). Fetch the installer
+# with an auth header — raw.githubusercontent needs it for private repos,
+# unlike the git credential helper wired above — then pipe to bash. Its
+# internal `git clone https://…` then authenticates via that helper, and
+# `cmpilot setup` lands the CLI. timeout-guarded so a stall can't wedge
+# boot; non-fatal and token-gated like the plugin steps.
+if [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
+    runuser -u claude -- env GH_TOKEN="$GITHUB_PERSONAL_ACCESS_TOKEN" timeout 180 bash -c \
+        'curl -fsSL -H "Authorization: token $GH_TOKEN" https://raw.githubusercontent.com/7Kronos/call-me-pilot/master/install.sh | bash' \
+        >/dev/null 2>&1 \
+        || echo "[entrypoint] WARN: call-me-pilot install.sh failed" >&2
+fi
 
 # playwright-skill is a plain skill (no CLI install path); clone or fast-forward.
 if [ -d "$CONFIG_DIR/skills/playwright-skill/.git" ]; then
@@ -421,6 +449,11 @@ chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
         [ -n "$val" ] || continue
         printf '%s="%s"\n' "$var" "${val//\"/\\\"}"
     done
+    # gh's git credential helper (configured in the plugin block) reads
+    # GH_TOKEN at run time; mirror the PAT into it so interactive SSH
+    # login shells authenticate private git/gh/cmpilot operations too.
+    [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ] && \
+        printf 'GH_TOKEN="%s"\n' "${GITHUB_PERSONAL_ACCESS_TOKEN//\"/\\\"}"
 } > /etc/environment
 chmod 0644 /etc/environment
 
