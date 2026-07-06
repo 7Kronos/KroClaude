@@ -98,13 +98,10 @@ ENV PATH="/home/claude/.local/bin:${PATH}"
 
 # /etc/environment is read by pam_env (UsePAM yes in sshd_config) so SSH
 # sessions inherit the same PATH that ENV PATH gives the entrypoint.
-# The entrypoint regenerates this file on every boot so compose-supplied
-# runtime vars (API keys, tokens, etc.) reach SSH login shells too — see
-# the "/etc/environment propagation" block in scripts/entrypoint.sh.
-# This baseline write covers the case where the image is started with a
-# non-default entrypoint that skips the regeneration.
-RUN printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\nDOCKER_HOST="tcp://localhost:2375"\n' \
-    > /etc/environment
+# Its content is single-sourced from config/environment.d/: the baseline
+# bake happens in the "Bundled Claude Code customization" layer below,
+# and entrypoint stage 60 regenerates it on every boot with the
+# compose-supplied passthrough vars appended.
 
 # ---------- npm global packages (FR-003, FR-003a) ----------
 RUN npm i -g \
@@ -258,6 +255,11 @@ COPY config/ /usr/local/share/kroclaude/config/
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/kroclaude-sync \
     /usr/local/bin/notify.py /usr/local/bin/rm-guard.sh && \
     chmod 0755 /etc/kroclaude/entrypoint.d/*.sh && \
+    # Baseline /etc/environment (single-sourced; see config/environment.d/).
+    # Covers images started with a non-default entrypoint that skips the
+    # boot-time regeneration in stage 60.
+    grep -v '^\s*#' /usr/local/share/kroclaude/config/environment.d/static.env \
+    | grep -v '^\s*$' > /etc/environment && \
     install -d -o claude -g claude /home/claude/.claude && \
     # The kroclaude-home volume is seeded from the image's /home/claude on
     # first creation (Docker named-volume copy-up) — make sure everything

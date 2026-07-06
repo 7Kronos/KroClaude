@@ -6,19 +6,6 @@
 # ==============================================================================
 
 services:
-  # One-shot: guarantees the OMC shared-state marker on the /workspace volume.
-  # Idempotent and host-path-free, so it works on fresh volumes and every restart.
-  omc-init:
-    image: busybox
-    command:
-      [
-        "sh",
-        "-c",
-        "[ -s /workspace/.omc-workspace ] || echo '{}' > /workspace/.omc-workspace && chmod 0644 /workspace/.omc-workspace",
-      ]
-    volumes:
-      - kroclaude-workspace:/workspace
-    restart: "no"
   kroclaude:
     build:
       context: .
@@ -75,14 +62,14 @@ services:
       # Daemon is isolated: `docker ps` inside this container only
       # sees children of the dind sidecar, never host containers.
       DOCKER_HOST: "tcp://localhost:2375"
+      # Background plugin/marketplace sync on boot (kroclaude-sync).
+      # Set to 0 to boot fully offline; run `kroclaude-sync` manually
+      # inside the container to sync on demand.
+      KROCLAUDE_SYNC_ON_BOOT: "${KROCLAUDE_SYNC_ON_BOOT:-1}"
 
     ports:
       # Feature 003 — SSH access. Host port overridable via env.
       - "${KROCLAUDE_SSH_HOST_PORT:-2221}:2221"
-
-    depends_on:
-      omc-init:
-        condition: service_completed_successfully
 
     volumes:
       # ONE persistent home volume. Everything under /home/claude —

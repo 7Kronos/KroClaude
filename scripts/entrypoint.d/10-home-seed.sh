@@ -31,6 +31,14 @@ if [ ! -f "$CLAUDE_HOME/.claude.json" ]; then
     fi
 fi
 
+# ---------- OMC shared-state marker on /workspace (every boot) ----------
+# Replaces the former omc-init busybox one-shot compose service; same
+# semantics (create-if-empty, mode 0644, root-owned).
+if [ -d /workspace ]; then
+    [ -s /workspace/.omc-workspace ] || echo '{}' > /workspace/.omc-workspace
+    chmod 0644 /workspace/.omc-workspace
+fi
+
 # ---------- Per-CLI dotdir seeding (create-if-missing, every boot) ----------
 # Not sentinel-gated: a user can wipe ~/.codex without wiping ~/.claude,
 # and the seed must come back. Each write is create-if-missing so
