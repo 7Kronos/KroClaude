@@ -301,15 +301,20 @@ merge_fragments "$SOURCE_DIR/mcp-servers.d" "$CONFIG_DIR/.mcp.json"     "$MCP_ME
 # the deployment propagate. Per-item failure is non-fatal (FR-009).
 
 # Git/gh auth for private plugin repos (e.g. 7Kronos/call-me-pilot).
-# Reuse the deployment-supplied PAT: point git's credential helper at gh
-# (`gh auth git-credential` reads GH_TOKEN at run time, so no secret is
-# written into ~/.gitconfig). Enables the private `marketplace add`,
+# Prefer the persisted `gh auth login` OAuth (kroclaude-gh volume) and
+# only fall back to the deployment-supplied PAT — an invalid PAT must
+# never shadow a working login (same precedence trap as the
+# ANTHROPIC_API_KEY / `claude login` fix). The token is passed
+# per-command via env GH_TOKEN, never exported globally or persisted:
+# `gh auth git-credential` resolves auth at run time, so interactive
+# shells keep using hosts.yml. Enables the private `marketplace add`,
 # `plugin install cmpilot@call-me-pilot`, and call-me-pilot install.sh
 # clone below. No token -> skipped, and those private steps then fail
 # non-fatally like any other (FR-009). Public marketplaces are unaffected.
-if [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
-    export GH_TOKEN="$GITHUB_PERSONAL_ACCESS_TOKEN"
-    runuser -u claude -- env GH_TOKEN="$GH_TOKEN" gh auth setup-git >/dev/null 2>&1 \
+GH_BOOT_TOKEN="$(runuser -u claude -- gh auth token 2>/dev/null || true)"
+[ -n "$GH_BOOT_TOKEN" ] || GH_BOOT_TOKEN="${GITHUB_PERSONAL_ACCESS_TOKEN:-}"
+if [ -n "$GH_BOOT_TOKEN" ]; then
+    runuser -u claude -- env GH_TOKEN="$GH_BOOT_TOKEN" gh auth setup-git >/dev/null 2>&1 \
         || echo "[entrypoint] WARN: gh auth setup-git failed; private plugins may not install" >&2
 fi
 
@@ -341,8 +346,8 @@ done
 # internal `git clone https://…` then authenticates via that helper, and
 # `cmpilot setup` lands the CLI. timeout-guarded so a stall can't wedge
 # boot; non-fatal and token-gated like the plugin steps.
-if [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
-    runuser -u claude -- env GH_TOKEN="$GITHUB_PERSONAL_ACCESS_TOKEN" timeout 180 bash -c \
+if [ -n "$GH_BOOT_TOKEN" ]; then
+    runuser -u claude -- env GH_TOKEN="$GH_BOOT_TOKEN" timeout 180 bash -c \
         'curl -fsSL -H "Authorization: token $GH_TOKEN" https://raw.githubusercontent.com/7Kronos/call-me-pilot/master/install.sh | bash' \
         >/dev/null 2>&1 \
         || echo "[entrypoint] WARN: call-me-pilot install.sh failed" >&2
@@ -449,11 +454,11 @@ chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
         [ -n "$val" ] || continue
         printf '%s="%s"\n' "$var" "${val//\"/\\\"}"
     done
-    # gh's git credential helper (configured in the plugin block) reads
-    # GH_TOKEN at run time; mirror the PAT into it so interactive SSH
-    # login shells authenticate private git/gh/cmpilot operations too.
-    [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ] && \
-        printf 'GH_TOKEN="%s"\n' "${GITHUB_PERSONAL_ACCESS_TOKEN//\"/\\\"}"
+    # GH_TOKEN is deliberately NOT mirrored here: gh gives an env token
+    # precedence over the persisted `gh auth login` in hosts.yml, so a
+    # stale PAT would shadow a working login in every SSH shell (same
+    # trap as ANTHROPIC_API_KEY above). Interactive private git/gh ops
+    # authenticate via the persisted login + gh credential helper.
 } > /etc/environment
 chmod 0644 /etc/environment
 
