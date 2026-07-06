@@ -10,6 +10,33 @@ Image tag versions are independent of the project constitution version.
 
 ### Changed
 
+- **Simplify-stack refactor** (#8): the build and runtime are
+  restructured for maintainability; functional surface unchanged.
+  - **Tool manifest**: the ~11 hand-rolled "download latest GitHub
+    release" Dockerfile layers are replaced by pinned entries in
+    `config/tools.json` + one `scripts/install-tools.sh` layer. Bump
+    all pins with `scripts/bump-tools.sh`, via the weekly `bump-tools`
+    workflow PR, or not at all — builds are reproducible now.
+    Dependabot covers base images and Actions.
+  - **Single home volume**: `/home/claude` is one `kroclaude-home`
+    volume, replacing `kroclaude-config`/`-gh`/`-codex`/`-gemini`/
+    `-vscode` plus all persist_dotdir symlinks and HELM/K9S env
+    redirects. **Migration**: run `scripts/migrate-volumes.sh` on the
+    host while the stack is down; in-container dotdir adoption is
+    automatic on next boot.
+  - **Offline-safe boot**: the entrypoint is split into single-concern
+    stages under `scripts/entrypoint.d/`; all boot-time network work
+    (marketplaces, plugins, call-me-pilot, playwright-skill) moved to
+    `kroclaude-sync`, backgrounded on boot (`KROCLAUDE_SYNC_ON_BOOT=0`
+    to disable) and runnable on demand.
+  - **Shell config as files** (`config/shell/` → `/etc`), **env
+    manifest** (`config/environment.d/` → `/etc/environment`), jq merge
+    filters extracted to `scripts/filters/` with offline unit tests,
+    `omc-init` compose service folded into the entrypoint, and
+    `docs/architecture.md` added as the single current design doc.
+  - Note: pinning helm to latest lands helm 4.x (the old build's
+    "latest at build time" behavior would too).
+
 - **Deployment-process simplification pass**: entrypoint, Dockerfile,
   fetch-plugins, smoke tests, and CI all reworked for maintainability.
   No user-facing behavior change; reflection / merge / first-boot

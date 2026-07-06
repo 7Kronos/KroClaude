@@ -5,6 +5,7 @@
 # Spec Kit & docs (not needed in build context)
 .specify/
 specs/
+docs/
 README.md
 CHANGELOG.md
 THIRD-PARTY-NOTICES
@@ -16,11 +17,10 @@ LICENSE
 # Tests (run against the built image, not baked into it)
 tests/
 
-# NOTE: skills/ is intentionally part of the build context — the
-# Dockerfile COPYs it into /usr/local/share/kroclaude/skills/ and the
-# entrypoint reflects bundled skills into the persistent volume on
-# every container start (feature 002-skill-bundling). Do not add a
-# pattern that excludes skills/ here.
+# NOTE: config/ and scripts/ are intentionally part of the build
+# context — the Dockerfile COPYs the whole config/ tree (bundled
+# customizations, tools.json, shell + environment manifests) and the
+# entrypoint stages/installers from scripts/. Do not exclude them here.
 
 # Editor & OS
 .vscode/

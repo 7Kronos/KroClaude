@@ -8,9 +8,11 @@ rules.
 
 - `/workspace` — user project files. Persistent (named Docker volume).
   Default working directory.
-- `~/.claude` — config, credentials, shell history, hook configs.
-  Persistent (separate named Docker volume).
-- Everything else — ephemeral.
+- `/home/claude` — your ENTIRE home directory is persistent (single
+  named Docker volume): `~/.claude` config/credentials/history,
+  `~/.config`, `~/.kube`, `~/.docker`, `~/.codex`, `~/.gemini`,
+  `~/.vscode-server`, and any dotdir a CLI creates.
+- Everything outside `/workspace` and `/home/claude` — ephemeral.
 
 ## Tools available (already installed; do not propose installing them)
 
@@ -32,7 +34,12 @@ rules.
   `pyyaml`, `python-dotenv`, `markdown`, `rich`, `click`, `tqdm`,
   `playwright`, `apprise`, `xlsxwriter`.
 - Database CLIs: `psql`, `redis-cli`, `sqlite3`.
+- Kubernetes: `kubectl`, `helm`, `k9s`, `kubectx`/`kubens`, `stern`,
+  `kind` (pairs with the dind sidecar). Also `nats`, `supabase`.
 - Media: `imagemagick`, `ffmpeg`.
+- `kroclaude-sync` — refreshes bundled plugin marketplaces, plugins,
+  and cloned skills on demand (also runs in the background at boot;
+  log: `~/.claude/logs/kroclaude-sync.log`).
 
 If a needed tool is missing, `sudo apt-get install <pkg>` or use a
 language-specific installer; `sudo` is passwordless for the `claude`

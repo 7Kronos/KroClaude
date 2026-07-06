@@ -1,26 +1,34 @@
-<!-- SPECKIT START -->
-Active feature: `005-config-bundling` (unify all Claude Code
-customization types — skills, commands, agents, output-styles, hooks
-fragments, MCP server fragments, plugins — under `/config/` with
-per-element subfolders, reflected into ~/.claude on every boot).
-For technologies, project structure, shell commands, and other
-context, read the current implementation plan:
-[specs/005-config-bundling/plan.md](specs/005-config-bundling/plan.md).
-Companion artifacts: [spec.md](specs/005-config-bundling/spec.md),
-[research.md](specs/005-config-bundling/research.md),
-[data-model.md](specs/005-config-bundling/data-model.md),
-[quickstart.md](specs/005-config-bundling/quickstart.md),
-[contracts/](specs/005-config-bundling/contracts/).
+# KroClaude
 
-Prior feature references:
-- `001-claude-shell-base` — [specs/001-claude-shell-base/](specs/001-claude-shell-base/)
-  base image, compose, entrypoint, smoke suite. **NOTE**: feature 003
-  amends FR-003 (SSH was client-only) and reverses research §R2
-  (rejected SSH server) — see feature 003 FR-013.
-- `002-skill-bundling` — [specs/002-skill-bundling/](specs/002-skill-bundling/)
-  bundled skills + reflection-on-boot. **NOTE**: feature 005 amends
-  FR-001 (source path moves from /skills/ to /config/skills/) but
-  preserves all runtime behavior FRs — see feature 005 FR-012.
-- `003-ssh-access` — [specs/003-ssh-access/](specs/003-ssh-access/)
-  hardened sshd on port 2221, key-only, claude-only.
-<!-- SPECKIT END -->
+A containerized Claude Code shell environment (Dockerfile +
+docker-compose stack, deployable on Coolify).
+
+**Current architecture — read this first**:
+[docs/architecture.md](docs/architecture.md) covers build layers, boot
+stages, the persistence model, SSH access, and how tool versions are
+bumped. Consult it before changing `Dockerfile`, `docker-compose.yaml`,
+or anything under `scripts/`.
+
+Key invariants (rationale in docs/architecture.md):
+
+- **Boot is offline-safe.** Nothing under `scripts/entrypoint.d/` may
+  touch the network. Network work belongs in `scripts/kroclaude-sync`
+  (backgrounded by stage 80).
+- **Third-party binaries are manifest-pinned.** Add tools as entries in
+  `config/tools.json` (installed by `scripts/install-tools.sh`), never
+  as hand-rolled `RUN curl …` Dockerfile blocks. Bump pins with
+  `scripts/bump-tools.sh` or the weekly `bump-tools` workflow PR.
+- **`/home/claude` is ONE persistent volume.** Dotdirs persist at their
+  natural paths — no per-CLI volumes, symlinks, or env-var redirects.
+  Interactive-shell setup therefore lives system-level in
+  `config/shell/` (→ `/etc`), never appended to `~/.bashrc` in the
+  image.
+- **Reflection preserves user items.** `config/<type>/` →
+  `~/.claude/<type>/` on every boot; user-installed items with
+  non-colliding names are never touched. Merge-filter contracts:
+  `specs/005-config-bundling/contracts/`, unit tests in `tests/unit/`.
+
+`specs/` (features 001, 002, 003, 005) is **historical** feature
+documentation. The behavioral contracts still hold, but file layouts
+referenced there may predate the simplify-stack refactor —
+docs/architecture.md wins on conflicts.
