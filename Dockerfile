@@ -17,6 +17,7 @@ ARG K9S_VERSION=
 ARG KUBECTX_VERSION=
 ARG STERN_VERSION=
 ARG KIND_VERSION=
+ARG HERDR_VERSION=
 ARG OMNISHARP_VERSION=
 ARG TARGETARCH
 
@@ -253,6 +254,18 @@ RUN if [ -z "$KIND_VERSION" ]; then \
     curl -fsSL -o /usr/local/bin/kind \
     "https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-${KIND_ARCH}" && \
     chmod +x /usr/local/bin/kind
+
+# herdr — CLI tool (ogulcancelik/herdr). Single binary release, named by
+# kernel arch (x86_64 / aarch64) rather than the amd64/arm64 Go convention
+# used above, so this layer's arch case differs from the k8s tools'.
+RUN if [ -z "$HERDR_VERSION" ]; then \
+    HERDR_VERSION=$(curl -fsSL https://api.github.com/repos/ogulcancelik/herdr/releases/latest | jq -r .tag_name); \
+    fi && \
+    HERDR_VERSION=${HERDR_VERSION#v} && \
+    HERDR_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64";; esac) && \
+    curl -fsSL -o /usr/local/bin/herdr \
+    "https://github.com/ogulcancelik/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-${HERDR_ARCH}" && \
+    chmod +x /usr/local/bin/herdr
 
 # ---------- bat / fd symlinks (Debian names them batcat / fdfind) + locale ----------
 RUN ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null || true && \
