@@ -18,6 +18,7 @@ ARG KUBECTX_VERSION=
 ARG STERN_VERSION=
 ARG KIND_VERSION=
 ARG HERDR_VERSION=
+ARG RTK_VERSION=
 ARG OMNISHARP_VERSION=
 ARG TARGETARCH
 
@@ -266,6 +267,21 @@ RUN if [ -z "$HERDR_VERSION" ]; then \
     curl -fsSL -o /usr/local/bin/herdr \
     "https://github.com/ogulcancelik/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-${HERDR_ARCH}" && \
     chmod +x /usr/local/bin/herdr
+
+# rtk — token-saving CLI proxy for Claude (rtk-ai/rtk). Tarball ships the
+# rtk binary at root (like k9s/stern). Asset naming uses full Rust target
+# triples that are asymmetric across arch — x86_64 ships musl, aarch64
+# ships gnu — so the case emits the whole triple, not just the arch.
+RUN if [ -z "$RTK_VERSION" ]; then \
+    RTK_VERSION=$(curl -fsSL https://api.github.com/repos/rtk-ai/rtk/releases/latest | jq -r .tag_name); \
+    fi && \
+    RTK_VERSION=${RTK_VERSION#v} && \
+    RTK_TRIPLE=$(case "$TARGETARCH" in arm64) echo "aarch64-unknown-linux-gnu";; *) echo "x86_64-unknown-linux-musl";; esac) && \
+    curl -fsSL -o /tmp/rtk.tar.gz \
+    "https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/rtk-${RTK_TRIPLE}.tar.gz" && \
+    tar -xzf /tmp/rtk.tar.gz -C /usr/local/bin rtk && \
+    chmod +x /usr/local/bin/rtk && \
+    rm /tmp/rtk.tar.gz
 
 # ---------- bat / fd symlinks (Debian names them batcat / fdfind) + locale ----------
 RUN ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null || true && \
