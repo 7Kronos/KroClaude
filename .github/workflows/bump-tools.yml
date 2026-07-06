@@ -1,0 +1,58 @@
+# Weekly automated version bumps for config/tools.json.
+#
+# Runs scripts/bump-tools.sh against every pinned tool and opens ONE PR
+# with all the changes, so nobody ever hand-searches release pages.
+# CI (build + smoke suite) runs on that PR like any other — merging it
+# is the whole "update all the tools" workflow.
+#
+# NOTE: requires the repo setting
+#   Settings → Actions → General → "Allow GitHub Actions to create and
+#   approve pull requests"
+# to be enabled, or the `gh pr create` step will fail.
+name: Bump tool versions
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC, same cadence as security-scan
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Refresh pins from upstream
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash scripts/bump-tools.sh config/tools.json | tee /tmp/bump.log
+
+      - name: Open PR if anything changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            echo "All pins already up to date."
+            exit 0
+          fi
+          branch="chore/bump-tools-$(date +%Y%m%d)"
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: bump pinned tool versions"
+          git push -u origin "$branch" --force
+          {
+            echo "Automated weekly refresh of \`config/tools.json\` pins."
+            echo
+            echo '```'
+            cat /tmp/bump.log
+            echo '```'
+          } > /tmp/pr-body.md
+          gh pr create \
+            --title "chore: bump pinned tool versions" \
+            --body-file /tmp/pr-body.md \
+            --base "${GITHUB_REF_NAME}"
