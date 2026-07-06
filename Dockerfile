@@ -18,18 +18,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DBUS_SESSION_BUS_ADDRESS=disabled: \
     CHROMIUM_FLAGS="--no-sandbox --disable-gpu --disable-dev-shm-usage" \
     CHROME_PATH=/usr/bin/chromium \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-    # Redirect helm + k9s dotdirs onto the kroclaude-config persistent
-    # volume via the CLIs' own env-var overrides. Replaces three
-    # symlinks (helm-config, helm-cache, k9s) in entrypoint.sh —
-    # cheaper than maintaining migrations and works without a symlink
-    # lookup at runtime. Mirrored into /etc/environment for SSH login
-    # shells (pam_env). HELM_DATA_HOME also persists helm plugins,
-    # which the symlink-based version did not cover.
-    HELM_CONFIG_HOME=/home/claude/.claude/helm-config \
-    HELM_CACHE_HOME=/home/claude/.claude/helm-cache \
-    HELM_DATA_HOME=/home/claude/.claude/helm-data \
-    K9S_CONFIG_DIR=/home/claude/.claude/k9s
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # ---------- System packages (FR-003) ----------
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -114,7 +103,7 @@ ENV PATH="/home/claude/.local/bin:${PATH}"
 # the "/etc/environment propagation" block in scripts/entrypoint.sh.
 # This baseline write covers the case where the image is started with a
 # non-default entrypoint that skips the regeneration.
-RUN printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\nDOCKER_HOST="tcp://localhost:2375"\nHELM_CONFIG_HOME="/home/claude/.claude/helm-config"\nHELM_CACHE_HOME="/home/claude/.claude/helm-cache"\nHELM_DATA_HOME="/home/claude/.claude/helm-data"\nK9S_CONFIG_DIR="/home/claude/.claude/k9s"\n' \
+RUN printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\nDOCKER_HOST="tcp://localhost:2375"\n' \
     > /etc/environment
 
 # ---------- npm global packages (FR-003, FR-003a) ----------
@@ -259,7 +248,11 @@ COPY scripts/rm-guard.sh   /usr/local/bin/rm-guard.sh
 COPY config/ /usr/local/share/kroclaude/config/
 
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py /usr/local/bin/rm-guard.sh && \
-    install -d -o claude -g claude /home/claude/.claude
+    install -d -o claude -g claude /home/claude/.claude && \
+    # The kroclaude-home volume is seeded from the image's /home/claude on
+    # first creation (Docker named-volume copy-up) — make sure everything
+    # it copies is claude-owned.
+    chown -R claude:claude /home/claude
 
 # ---------- Shell configuration (config/shell/, installed system-level) ----------
 # Interactive-shell setup lives in versioned files instead of Dockerfile

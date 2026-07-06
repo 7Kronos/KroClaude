@@ -32,35 +32,32 @@ if [ ! -f "$SENTINEL" ]; then
     echo "[entrypoint] First-boot seed complete."
 fi
 
-# ---------- ~/.claude.json symlink (idempotent, every boot) ----------
-# Lives in the writable container layer (not in the volume), so it
-# disappears on every container recreation. Without it, claude-code
-# can't find its `oauthAccount` pointer and the user has to re-login.
-# Re-create the symlink → volume on every boot. Seed the target file
-# only if missing so user-written content is preserved.
-if [ ! -L "$CLAUDE_HOME/.claude.json" ] || \
-   [ "$(readlink "$CLAUDE_HOME/.claude.json" 2>/dev/null)" != "$CONFIG_DIR/.claude.json" ]; then
-    ln -sfn "$CONFIG_DIR/.claude.json" "$CLAUDE_HOME/.claude.json"
-fi
-if [ ! -f "$CONFIG_DIR/.claude.json" ]; then
-    echo '{"hasCompletedOnboarding":true,"installMethod":"native"}' > "$CONFIG_DIR/.claude.json"
+# ---------- ~/.claude.json (create-if-missing, every boot) ----------
+# A plain file on the persistent home volume — this is where claude-code
+# keeps its `oauthAccount` pointer. Migration: pre-home-volume releases
+# kept the real file at ~/.claude/.claude.json behind a symlink; adopt
+# that file if it's present and the plain file isn't.
+[ -L "$CLAUDE_HOME/.claude.json" ] && rm -f "$CLAUDE_HOME/.claude.json"
+if [ ! -f "$CLAUDE_HOME/.claude.json" ]; then
+    if [ -f "$CONFIG_DIR/.claude.json" ]; then
+        mv "$CONFIG_DIR/.claude.json" "$CLAUDE_HOME/.claude.json"
+    else
+        echo '{"hasCompletedOnboarding":true,"installMethod":"native"}' > "$CLAUDE_HOME/.claude.json"
+    fi
 fi
 
 # ---------- git identity (idempotent, every boot) ----------
-# HOME is NOT on a volume — only ~/.claude is. A first-boot-only
-# `git config --global` writes to ~/.gitconfig in the throwaway container
-# layer and is lost on the next container recreation, even though the
-# bootstrap sentinel survives in the volume (so the seed never re-runs).
-# That is why git "forgets" user.name/user.email after a redeploy.
-# Fix: symlink ~/.gitconfig onto the kroclaude-config volume (same pattern
-# as ~/.claude.json above) so identity AND manual `git config` edits
-# persist. git's lockfile resolves the symlink, writing through to the
-# volume target instead of replacing the link.
+# ~/.gitconfig is a plain file on the persistent home volume, so
+# identity and manual `git config` edits survive redeploys without the
+# old symlink-into-~/.claude dance. Migration: adopt a pre-home-volume
+# ~/.claude/.gitconfig if present.
+[ -L "$CLAUDE_HOME/.gitconfig" ] && rm -f "$CLAUDE_HOME/.gitconfig"
+if [ ! -f "$CLAUDE_HOME/.gitconfig" ] && [ -f "$CONFIG_DIR/.gitconfig" ]; then
+    mv "$CONFIG_DIR/.gitconfig" "$CLAUDE_HOME/.gitconfig"
+    chown claude:claude "$CLAUDE_HOME/.gitconfig"
+fi
 # Precedence: GIT_USER_* env wins when set (latest deploy wins); else keep
 # an existing persisted value; else seed a default.
-ln -sfn "$CONFIG_DIR/.gitconfig" "$CLAUDE_HOME/.gitconfig"
-[ -f "$CONFIG_DIR/.gitconfig" ] || install -m 0644 -o claude -g claude /dev/null "$CONFIG_DIR/.gitconfig"
-chown -h claude:claude "$CLAUDE_HOME/.gitconfig"
 runuser -u claude -- git config --global --get-all safe.directory 2>/dev/null | grep -qxF /workspace \
     || runuser -u claude -- git config --global --add safe.directory /workspace
 if [ -n "${GIT_USER_NAME:-}" ]; then
@@ -103,59 +100,32 @@ if [ -f "$SOURCE_DIR/per-cli/starship/starship.toml" ] && \
         "$CLAUDE_HOME/.config/starship.toml"
 fi
 
-# ---------- ~/.config/gh ownership (idempotent, every boot) ----------
-# Docker creates the named-volume mount target as root:root when the
-# volume is empty (first boot) — gh runs as claude and can't write
-# hosts.yml until we fix that. Also chown the parent ~/.config so
-# other CLIs the user installs later can drop dotdirs there. Don't
-# recurse into ~/.config/gh on later boots: anything inside is
-# already claude-owned (gh wrote it).
-install -d -o claude -g claude "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.config/gh"
-
-# ---------- ~/.vscode-server ownership (idempotent, every boot) ----------
-# Same root:root-on-empty-volume issue as ~/.config/gh above. VS Code
-# Remote-SSH connects as claude and writes its server install +
-# extensions here; without the chown, the first connect after a wipe
-# fails silently and VS Code falls back to re-downloading every time.
-install -d -o claude -g claude "$CLAUDE_HOME/.vscode-server"
-
-# ---------- Per-CLI persistent dotdir symlinks (idempotent, every boot) ----------
-# CLIs whose dotdirs aren't covered by a dedicated named volume get
-# symlinked into $CONFIG_DIR (which IS on the kroclaude-config volume),
-# so auth tokens + caches survive container recreation without adding a
-# volume per CLI. Same approach as the ~/.claude.json symlink near the
-# top of this script, generalized.
-#
-# Function args:
-#   $1 = target subdir under $CONFIG_DIR (e.g. "kube")
-#   $2 = override symlink path (default: $CLAUDE_HOME/.$1; needed for
-#        XDG paths like ~/.config/helm where parent ≠ $CLAUDE_HOME)
-#
-# On upgrade from a prior image where the path was a real dir, contents
-# are migrated into the persistent target before the symlink is laid
-# down. Idempotent: `ln -sfn` atomically replaces an existing symlink.
-persist_dotdir() {
-    local name="$1"
-    local symlink="${2:-$CLAUDE_HOME/.$name}"
-    local target="$CONFIG_DIR/$name"
-    install -d -o claude -g claude "$target" "$(dirname "$symlink")"
-    if [ -d "$symlink" ] && [ ! -L "$symlink" ]; then
-        cp -an "$symlink/." "$target/" 2>/dev/null || true
-        rm -rf "$symlink"
-        chown -R claude:claude "$target"
-    fi
-    ln -sfn "$target" "$symlink"
-    chown -h claude:claude "$symlink"
+# ---------- Pre-home-volume dotdir adoption (idempotent, every boot) ----------
+# /home/claude is one persistent volume now, so every CLI's dotdir
+# persists at its natural location with no symlinks or env redirects.
+# Releases before this refactor parked dotdirs under ~/.claude/<name>
+# (persist_dotdir symlinks: kube/supabase/docker/nats) or redirected
+# them via HELM_*_HOME / K9S_CONFIG_DIR env vars. If such a directory
+# is found and the natural location is still empty, move it into place
+# once. No-op on fresh volumes and on every boot after adoption.
+migrate_dotdir() {
+    local src="$CONFIG_DIR/$1" dest="$2"
+    [ -d "$src" ] || return 0
+    [ -L "$dest" ] && rm -f "$dest"
+    [ -e "$dest" ] && return 0
+    install -d -o claude -g claude "$(dirname "$dest")"
+    mv "$src" "$dest"
+    chown -R claude:claude "$dest"
 }
 
-persist_dotdir kube                                            # kubectl
-persist_dotdir supabase                                        # supabase login token
-persist_dotdir docker                                          # docker login auth (~/.docker/config.json)
-persist_dotdir nats        "$CLAUDE_HOME/.config/nats"         # nats contexts (auth)
-
-# helm + k9s persist via env-var redirects (HELM_*_HOME, K9S_CONFIG_DIR)
-# set in Dockerfile ENV and propagated via /etc/environment regen below
-# — no symlink needed since those CLIs honor their own dotdir overrides.
+migrate_dotdir kube        "$CLAUDE_HOME/.kube"                # kubectl
+migrate_dotdir supabase    "$CLAUDE_HOME/.supabase"            # supabase login token
+migrate_dotdir docker      "$CLAUDE_HOME/.docker"              # docker login auth
+migrate_dotdir nats        "$CLAUDE_HOME/.config/nats"         # nats contexts (auth)
+migrate_dotdir helm-config "$CLAUDE_HOME/.config/helm"         # ex-HELM_CONFIG_HOME
+migrate_dotdir helm-data   "$CLAUDE_HOME/.local/share/helm"    # ex-HELM_DATA_HOME
+migrate_dotdir helm-cache  "$CLAUDE_HOME/.cache/helm"          # ex-HELM_CACHE_HOME
+migrate_dotdir k9s         "$CLAUDE_HOME/.config/k9s"          # ex-K9S_CONFIG_DIR
 
 # ============================================================================
 # Bundled customization reflection (feature 005-config-bundling)
@@ -438,13 +408,6 @@ chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
 {
     printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\n'
     printf 'DOCKER_HOST="tcp://localhost:2375"\n'
-    # CLI dotdir redirects onto the kroclaude-config volume. Static
-    # (no compose-supplied source) — kept inline next to PATH so SSH
-    # login shells see them regardless of compose env state.
-    printf 'HELM_CONFIG_HOME="/home/claude/.claude/helm-config"\n'
-    printf 'HELM_CACHE_HOME="/home/claude/.claude/helm-cache"\n'
-    printf 'HELM_DATA_HOME="/home/claude/.claude/helm-data"\n'
-    printf 'K9S_CONFIG_DIR="/home/claude/.claude/k9s"\n'
     for var in TZ GIT_USER_NAME GIT_USER_EMAIL \
                NODE_OPTIONS NOTIFY_URLS \
                EXA_API_KEY GITHUB_PERSONAL_ACCESS_TOKEN \
@@ -462,13 +425,19 @@ chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
 } > /etc/environment
 chmod 0644 /etc/environment
 
-# ---------- Final ownership sweep (idempotent, every boot) ----------
-# Single point of truth: every path under $CLAUDE_HOME is claude-owned
-# by the time s6 takes over. /workspace is intentionally NOT swept —
-# it's never written-to during docker build, the WORKDIR is chowned
-# in the Dockerfile, and Docker's named-volume mount inherits
-# ownership from the (claude-owned) target on first boot.
-chown -R claude:claude "$CLAUDE_HOME"
+# ---------- Ownership sweep (idempotent, every boot) ----------
+# Everything this script wrote as root becomes claude-owned before s6
+# takes over. Scoped to the paths the entrypoint actually touches — a
+# recursive chown of the entire home volume (which now includes
+# ~/.vscode-server and other large trees) would slow every boot.
+# /workspace is intentionally NOT swept — it's never written-to during
+# docker build, the WORKDIR is chowned in the Dockerfile, and Docker's
+# named-volume mount inherits ownership from the claude-owned target.
+chown claude:claude "$CLAUDE_HOME" "$CLAUDE_HOME/.claude.json"
+[ -f "$CLAUDE_HOME/.gitconfig" ] && chown claude:claude "$CLAUDE_HOME/.gitconfig"
+chown -R claude:claude "$CONFIG_DIR" \
+    "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini" \
+    "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.ssh"
 
 export DISPLAY=:99
 
