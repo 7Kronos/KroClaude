@@ -415,6 +415,7 @@ chmod 0600 "$CLAUDE_HOME/.ssh/authorized_keys"
     for var in TZ GIT_USER_NAME GIT_USER_EMAIL \
                NODE_OPTIONS NOTIFY_URLS \
                EXA_API_KEY GITHUB_PERSONAL_ACCESS_TOKEN \
+               COOLIFY_ACCESS_TOKEN COOLIFY_BASE_URL \
                NUGET_REGISTRY_USER NUGET_REGISTRY_TOKEN; do
         val="${!var:-}"
         [ -n "$val" ] || continue
