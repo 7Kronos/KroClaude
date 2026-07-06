@@ -34,6 +34,10 @@ Image tag versions are independent of the project constitution version.
     filters extracted to `scripts/filters/` with offline unit tests,
     `omc-init` compose service folded into the entrypoint, and
     `docs/architecture.md` added as the single current design doc.
+  - Claude Code now installs system-wide via the official npm package
+    (was claude.ai/install.sh into `~/.local/bin` — a home-dir install
+    would freeze the CLI at whatever version the new home volume first
+    captured; system-wide, `docker compose build` updates it again).
   - Note: pinning helm to latest lands helm 4.x (the old build's
     "latest at build time" behavior would too).
 

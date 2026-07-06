@@ -87,13 +87,14 @@ RUN usermod -l claude -d /home/claude -m node && \
     echo "claude ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/claude && \
     chmod 0440 /etc/sudoers.d/claude
 
-# ---------- Claude Code CLI (FR-002) ----------
-# WORKDIR must be non-root-owned or the installer hangs.
+# ---------- /workspace ownership ----------
+# The workspace volume inherits ownership from this directory on first
+# creation (Docker copy-up).
 WORKDIR /workspace
 RUN chown claude:claude /workspace
-USER claude
-RUN curl -fsSL https://claude.ai/install.sh | bash
-USER root
+
+# ~/.local/bin stays on PATH for user-installed tools (uv tool, pipx),
+# which now persist on the home volume.
 ENV PATH="/home/claude/.local/bin:${PATH}"
 
 # /etc/environment is read by pam_env (UsePAM yes in sshd_config) so SSH
@@ -104,7 +105,14 @@ ENV PATH="/home/claude/.local/bin:${PATH}"
 # compose-supplied passthrough vars appended.
 
 # ---------- npm global packages (FR-003, FR-003a) ----------
+# Claude Code (FR-002) installs HERE, system-wide via the official npm
+# package — NOT via claude.ai/install.sh into ~/.local/bin. /home/claude
+# is a persistent volume, so a home-dir install would freeze the CLI at
+# whatever version the volume first captured; a system install means
+# `docker compose build` actually updates it. Autoupdater is disabled in
+# config/settings.json (DISABLE_AUTOUPDATER=1) — rebuild to update.
 RUN npm i -g \
+    @anthropic-ai/claude-code \
     typescript tsx \
     pnpm \
     vite esbuild \

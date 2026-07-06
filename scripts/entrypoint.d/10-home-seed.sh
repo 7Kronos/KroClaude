@@ -27,7 +27,7 @@ if [ ! -f "$CLAUDE_HOME/.claude.json" ]; then
     if [ -f "$CONFIG_DIR/.claude.json" ]; then
         mv "$CONFIG_DIR/.claude.json" "$CLAUDE_HOME/.claude.json"
     else
-        echo '{"hasCompletedOnboarding":true,"installMethod":"native"}' > "$CLAUDE_HOME/.claude.json"
+        echo '{"hasCompletedOnboarding":true}' > "$CLAUDE_HOME/.claude.json"
     fi
 fi
 
