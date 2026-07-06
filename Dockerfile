@@ -261,107 +261,22 @@ COPY config/ /usr/local/share/kroclaude/config/
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py /usr/local/bin/rm-guard.sh && \
     install -d -o claude -g claude /home/claude/.claude
 
-# ---------- Bash history persistence (research R9) ----------
-RUN printf '\nexport HISTFILE=/home/claude/.claude/.bash_history\nexport HISTSIZE=10000\nexport HISTFILESIZE=20000\n' \
-    >> /home/claude/.bashrc && \
-    chown claude:claude /home/claude/.bashrc
-
-# ---------- Prefer persisted OAuth login over ANTHROPIC_API_KEY ----------
-# claude-code treats ANTHROPIC_API_KEY as overriding the persisted OAuth
-# login (~/.claude/.credentials.json). compose `environment:` sets the key
-# on PID 1, so it leaks into every `docker exec` / SSH interactive shell
-# and silently bypasses `claude login` — making the saved session look
-# like it never persists ("login every time"). When a real OAuth
-# credential is present, drop the env var for this shell so the persisted
-# login wins. Users who never ran `claude login` keep API-key auth (no
-# credentials file → no unset). Complements the /etc/environment exclusion
-# in entrypoint.sh, which only covers pam_env for login shells.
-# NOTE: a non-interactive `docker exec kroclaude claude ...` (no -it) does
-# not source .bashrc and still inherits the key from PID 1 — acceptable,
-# since the documented usage is the interactive `docker exec -it` / SSH path.
-RUN printf '\n# Prefer persisted OAuth login over ANTHROPIC_API_KEY (see Dockerfile)\nif [ -s "$HOME/.claude/.credentials.json" ]; then unset ANTHROPIC_API_KEY; fi\n' \
-    >> /home/claude/.bashrc && \
-    chown claude:claude /home/claude/.bashrc
-
-# ---------- Shell ergonomics (cherry-picked from dotfiles/home.nix) ----------
-# Wires starship prompt, zoxide smart-cd, direnv auto-load, eza ls
-# aliases, and fzf key bindings + completion + bat/fd integration into
-# claude's interactive bash sessions. Each integration is command-guarded
-# so a missing tool downgrades cleanly instead of breaking login.
-RUN <<'DOCKERFILE'
-cat >> /home/claude/.bashrc <<'BASHRC'
-
-# Shell ergonomics
-export EDITOR=nano
-
-command -v starship >/dev/null && eval "$(starship init bash)"
-command -v zoxide   >/dev/null && eval "$(zoxide init bash)"
-command -v direnv   >/dev/null && eval "$(direnv hook bash)"
-
-if command -v eza >/dev/null; then
-    alias ls='eza --icons=auto'
-    alias ll='eza --icons=auto -l'
-    alias la='eza --icons=auto -la'
-    alias lt='eza --icons=auto --tree'
-fi
-
-if command -v fzf >/dev/null; then
-    [ -f /usr/share/doc/fzf/examples/key-bindings.bash ] && \
-        source /usr/share/doc/fzf/examples/key-bindings.bash
-    [ -f /usr/share/doc/fzf/examples/completion.bash ] && \
-        source /usr/share/doc/fzf/examples/completion.bash
-    export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
-    export FZF_DEFAULT_OPTS='--height 40% --layout=reverse --border'
-    export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-    export FZF_CTRL_T_OPTS="--preview 'bat --style=numbers --color=always --line-range :500 {}'"
-    export FZF_ALT_C_COMMAND='fd --type d --hidden --follow --exclude .git'
-fi
-BASHRC
-chown claude:claude /home/claude/.bashrc
-DOCKERFILE
-
-# ---------- `remote` shell function (claude remote-control launcher) ----------
-# Convenience launcher: spins up a Remote Control server in $PWD (controllable
-# from claude.ai/code), spawns one isolated git worktree per on-demand session,
-# prefixes session names with $(basename $PWD), runs sessions with permissions
-# bypassed, and pre-flags $PWD as trusted in ~/.claude.json so the workspace-
-# trust dialog never blocks bootstrap. ~/.claude.json is a symlink into the
-# persistent ~/.claude/ volume — the jq edit writes through `cat >` (not mv)
-# so we don't replace the symlink with a regular file.
-RUN <<'DOCKERFILE'
-cat >> /home/claude/.bashrc <<'BASHRC'
-
-remote() {
-    local prefix
-    prefix=$(basename "$PWD")
-
-    if command -v jq >/dev/null 2>&1 && [ -e "$HOME/.claude.json" ]; then
-        local tmp
-        if tmp=$(mktemp) && jq --arg p "$PWD" \
-                '.projects[$p] = ((.projects[$p] // {}) + {hasTrustDialogAccepted: true})' \
-                "$HOME/.claude.json" > "$tmp"; then
-            cat "$tmp" > "$HOME/.claude.json"
-        fi
-        [ -n "${tmp:-}" ] && rm -f "$tmp"
-    fi
-
-    claude remote-control \
-        --spawn worktree \
-        --remote-control-session-name-prefix "$prefix" \
-        --permission-mode bypassPermissions \
-        "$@"
-}
-BASHRC
-chown claude:claude /home/claude/.bashrc
-DOCKERFILE
-
-# ---------- Land interactive logins in /workspace (feature 003) ----------
-# /etc/profile sources /etc/profile.d/*.sh for login shells (interactive
-# SSH login, `bash -l`). Non-interactive `ssh user@host cmd` invocations
-# stay in the user's HOME per standard SSH convention.
-RUN printf 'if [ -d /workspace ] && [ "$PWD" = "$HOME" ]; then cd /workspace; fi\n' \
-    > /etc/profile.d/kroclaude.sh && \
-    chmod 0644 /etc/profile.d/kroclaude.sh
+# ---------- Shell configuration (config/shell/, installed system-level) ----------
+# Interactive-shell setup lives in versioned files instead of Dockerfile
+# heredocs, and installs to /etc rather than appending to ~/.bashrc — so
+# it is diffable in review AND keeps applying when /home/claude is a
+# volume (a volume shadows image-baked home files after first creation).
+# Coverage: Debian's /etc/profile sources /etc/bash.bashrc for login
+# shells (SSH), and interactive non-login bash (docker exec -it … bash)
+# reads /etc/bash.bashrc directly — the loader below covers both.
+# NOTE: a non-interactive `docker exec kroclaude claude ...` (no -it)
+# sources neither and still inherits ANTHROPIC_API_KEY from PID 1 —
+# acceptable; the documented usage is interactive exec / SSH.
+COPY config/shell/profile.d/kroclaude.sh /etc/profile.d/kroclaude.sh
+COPY config/shell/bashrc.d/              /etc/kroclaude/bashrc.d/
+RUN chmod 0644 /etc/profile.d/kroclaude.sh /etc/kroclaude/bashrc.d/*.sh && \
+    printf '\n# KroClaude shell setup (source: config/shell/bashrc.d/ in the repo)\nfor _kc in /etc/kroclaude/bashrc.d/*.sh; do [ -r "$_kc" ] && . "$_kc"; done\nunset _kc\n' \
+    >> /etc/bash.bashrc
 
 # ---------- Working directory ----------
 WORKDIR /workspace
