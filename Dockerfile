@@ -35,8 +35,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ruby-full \
     # .NET runtime dep (libssl3 / libstdc++6 / zlib1g already pulled by base)
     libicu76 \
-    # Browser automation stack (FR-003b)
-    chromium xvfb \
+    # Browser automation stack (FR-003b). NOTE: chromium itself is
+    # TEMPORARILY installed by the pinned layer just below, not here —
+    # see the Debian #1141488 comment.
+    xvfb \
     fonts-liberation2 fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji \
     # Locale
     locales \
@@ -49,6 +51,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Media
     imagemagick ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+
+# ---------- TEMPORARY: chromium pinned to 149 (Debian bug #1141488) ----------
+# trixie-security's chromium 150.0.7871.46-1~deb13u1 crashes with SIGTRAP
+# ("Trace/breakpoint trap") on EVERY launch, fresh profiles included: an
+# ungoogled patch removed the {google:searchSource} handler while the
+# built-in Google search template still emits the token → NOTREACHED().
+# That breaks the whole FR-003b browser-automation stack — bare chromium,
+# puppeteer, and playwright alike. Until Debian ships the fix, install
+# the last-good 149 build from snapshot.debian.org via immutable
+# content-hash URLs (stable, arch-specific), and hold the packages.
+#
+# REVERT when trixie-security ships a chromium with #1141488 fixed
+# (https://bugs.debian.org/1141488): delete this layer and put
+# `chromium` back in the apt list above.
+RUN set -e; \
+    case "$TARGETARCH" in \
+    arm64) CHROMIUM=0a6923b2ba8a50de74ed744a8680db505a22d0dc; \
+    COMMON=e337bf346620b9a567a334447bbdef48c209e8d7; \
+    SANDBOX=27f0797606f1f66e278e4cc4d933f619367ee487;; \
+    *)     CHROMIUM=122a1721a282240e07dcc9f8f769d0a40361b789; \
+    COMMON=baabe01daaf628d599e14cf331d8b7cd1453e384; \
+    SANDBOX=52dbf5c3edb4e7e4e2ea6e10b655f738fb962617;; \
+    esac; \
+    for h in $CHROMIUM $COMMON $SANDBOX; do \
+    curl -fsSL --retry 3 -o "/tmp/chromium-$h.deb" "https://snapshot.debian.org/file/$h"; \
+    done; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends /tmp/chromium-*.deb; \
+    apt-mark hold chromium chromium-common chromium-sandbox; \
+    rm -f /tmp/chromium-*.deb; rm -rf /var/lib/apt/lists/*
 
 # Codex CLI sandbox helper requires bwrap setuid on restricted kernels
 RUN chmod u+s /usr/bin/bwrap

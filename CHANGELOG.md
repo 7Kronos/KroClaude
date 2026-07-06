@@ -8,6 +8,17 @@ Image tag versions are independent of the project constitution version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chromium pinned to 149.0.7827.196 (TEMPORARY)**: trixie-security's
+  chromium 150.0.7871.46 crashes with SIGTRAP on every launch (Debian
+  bug #1141488 — unhandled `{google:searchSource}` template token),
+  breaking headless browsing, puppeteer, and playwright. CI had been
+  red on US1 since the update. The last-good 149 build installs from
+  snapshot.debian.org and is apt-held; revert the pin layer in the
+  Dockerfile once Debian ships the fix. Note: the weekly Trivy scan may
+  flag 149 until then.
+
 ### Changed
 
 - **Simplify-stack refactor** (#8): the build and runtime are
