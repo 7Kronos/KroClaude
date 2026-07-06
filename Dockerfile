@@ -235,10 +235,18 @@ COPY s6-overlay/s6-rc.d/sshd/run      /etc/s6-overlay/s6-rc.d/sshd/run
 RUN chmod +x /etc/s6-overlay/s6-rc.d/sshd/run && \
     touch /etc/s6-overlay/s6-rc.d/user/contents.d/sshd
 
-# ---------- Helper scripts and default configs ----------
-COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY scripts/notify.py     /usr/local/bin/notify.py
-COPY scripts/rm-guard.sh   /usr/local/bin/rm-guard.sh
+# ---------- Helper scripts, entrypoint stages, merge filters ----------
+# entrypoint.sh is a ~20-line driver; the actual boot logic lives in
+# lex-ordered stages under /etc/kroclaude/entrypoint.d/ (one concern
+# each, individually testable). kroclaude-sync holds ALL boot-time
+# network work and runs backgrounded (stage 80) or on demand.
+COPY scripts/entrypoint.sh     /usr/local/bin/entrypoint.sh
+COPY scripts/entrypoint-lib.sh /etc/kroclaude/entrypoint-lib.sh
+COPY scripts/entrypoint.d/     /etc/kroclaude/entrypoint.d/
+COPY scripts/filters/          /usr/local/share/kroclaude/filters/
+COPY scripts/kroclaude-sync    /usr/local/bin/kroclaude-sync
+COPY scripts/notify.py         /usr/local/bin/notify.py
+COPY scripts/rm-guard.sh       /usr/local/bin/rm-guard.sh
 # ---------- Bundled Claude Code customization (feature 005-config-bundling) ----------
 # Single read-only image-time copy of the entire /config/ tree, replacing
 # the granular per-file COPYs and the legacy /skills/ COPY. The entrypoint
@@ -247,7 +255,9 @@ COPY scripts/rm-guard.sh   /usr/local/bin/rm-guard.sh
 # feature 001 contract preserved). See specs/005-config-bundling/.
 COPY config/ /usr/local/share/kroclaude/config/
 
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py /usr/local/bin/rm-guard.sh && \
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/kroclaude-sync \
+    /usr/local/bin/notify.py /usr/local/bin/rm-guard.sh && \
+    chmod 0755 /etc/kroclaude/entrypoint.d/*.sh && \
     install -d -o claude -g claude /home/claude/.claude && \
     # The kroclaude-home volume is seeded from the image's /home/claude on
     # first creation (Docker named-volume copy-up) — make sure everything
