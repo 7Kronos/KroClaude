@@ -84,6 +84,19 @@ place_fixture plugins sample-plugin
 
 build_and_up
 
+# Helper: wait (up to ~15s) for a pattern to appear in the container's
+# logs. The entrypoint writes its WARN lines a moment before the
+# healthcheck can flip, but `docker logs` delivery is asynchronous —
+# a single grep right after wait_healthy loses that race now and then.
+wait_logs() {
+    local pattern="$1" i
+    for i in $(seq 1 15); do
+        docker logs $SVC 2>&1 | grep -q "$pattern" && return 0
+        sleep 1
+    done
+    return 1
+}
+
 # Helper: assert a path exists in the container with claude:claude ownership.
 assert_in_container() {
     local path="$1"
@@ -211,7 +224,7 @@ hash2=$(docker exec -u claude $SVC sha256sum /home/claude/.claude/settings.json 
 log "US5 — failure isolation: malformed fragment skipped, valid one still merges (FR-009)"
 echo 'not json at all' > "$CONFIG_DIR/hooks.d/00-malformed.json"
 build_and_up
-docker logs $SVC 2>&1 | grep -q 'WARN: skipping malformed fragment.*00-malformed' \
+wait_logs 'WARN: skipping malformed fragment.*00-malformed' \
     || fail "US5 — entrypoint should log WARN about malformed 00-malformed.json"
 docker exec -u claude $SVC jq -r '.hooks.PostToolUse[].hooks[].command' /home/claude/.claude/settings.json \
     | grep -q 'echo OVERRIDE' \
@@ -249,7 +262,7 @@ grep -qx 'local-only' "$TMP_DIR/us6_keys" || fail "US6 — local-only user entry
 log "US6 — failure isolation: malformed mcp fragment skipped (FR-009)"
 echo '{not valid json' > "$CONFIG_DIR/mcp-servers.d/00-malformed.json"
 build_and_up
-docker logs $SVC 2>&1 | grep -q 'WARN: skipping malformed fragment.*00-malformed' \
+wait_logs 'WARN: skipping malformed fragment.*00-malformed' \
     || fail "US6 — entrypoint should log WARN about malformed 00-malformed.json"
 docker exec -u claude $SVC jq -r '.mcpServers | keys[]' /home/claude/.claude/.mcp.json \
     | grep -qx 'postgres' \
