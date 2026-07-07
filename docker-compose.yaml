@@ -36,6 +36,27 @@ services:
       # Optional notifications (Apprise URLs). Off unless the in-container
       # sentinel /home/claude/.claude/notify-on also exists.
       NOTIFY_URLS: "${NOTIFY_URLS:-}"
+      # Optional — consumed by the bundled EXA MCP server fragment
+      # (config/mcp-servers.d/exa.json).
+      EXA_API_KEY: "${EXA_API_KEY:-}"
+      # Optional — consumed by the bundled Coolify MCP server fragment
+      # (config/mcp-servers.d/coolify.json). ACCESS_TOKEN is a Coolify
+      # API token; BASE_URL points at the Coolify instance.
+      COOLIFY_ACCESS_TOKEN: "${COOLIFY_ACCESS_TOKEN:-}"
+      COOLIFY_BASE_URL: "${COOLIFY_BASE_URL:-}"
+      # Optional — passed to the github MCP server (see entrypoint.sh).
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_PERSONAL_ACCESS_TOKEN:-}"
+      # Optional — credentials for a private NuGet feed. When both are
+      # set, the entrypoint registers a user-level NuGet source named
+      # "GitHub" for the claude user on every boot (stage 45), so
+      # `dotnet restore` works with no post-deployment hook. URL
+      # defaults to the user's GitHub Packages feed
+      # (https://nuget.pkg.github.com/<USER>/index.json); override via
+      # NUGET_REGISTRY_URL for an org feed. Also propagated to SSH
+      # login shells via /etc/environment.
+      NUGET_REGISTRY_USER: "${NUGET_REGISTRY_USER:-}"
+      NUGET_REGISTRY_TOKEN: "${NUGET_REGISTRY_TOKEN:-}"
+      NUGET_REGISTRY_URL: "${NUGET_REGISTRY_URL:-}"
       # Optional SSH access (feature 003-ssh-access). Verbatim contents
       # of ~claude/.ssh/authorized_keys; one or more public keys, one
       # per line. Empty = no login possible.
@@ -47,24 +68,25 @@ services:
       # Daemon is isolated: `docker ps` inside this container only
       # sees children of the dind sidecar, never host containers.
       DOCKER_HOST: "tcp://localhost:2375"
+      # Background plugin/marketplace sync on boot (kroclaude-sync).
+      # Set to 0 to boot fully offline; run `kroclaude-sync` manually
+      # inside the container to sync on demand.
+      KROCLAUDE_SYNC_ON_BOOT: "${KROCLAUDE_SYNC_ON_BOOT:-1}"
 
     ports:
       # Feature 003 — SSH access. Host port overridable via env.
       - "${KROCLAUDE_SSH_HOST_PORT:-2221}:2221"
 
     volumes:
-      - kroclaude-config:/home/claude/.claude
+      # ONE persistent home volume. Everything under /home/claude —
+      # claude/gh/codex/gemini credentials, kube/docker/nats/supabase
+      # dotdirs, VS Code Remote-SSH server, shell history — survives
+      # redeploys with no per-CLI symlinks, env redirects, or extra
+      # volumes. Replaces the former kroclaude-config / -gh / -codex /
+      # -gemini / -vscode volumes; upgrading an existing deployment?
+      # Run scripts/migrate-volumes.sh once on the host first.
+      - kroclaude-home:/home/claude
       - kroclaude-workspace:/workspace
-      # Per-CLI auth volumes so `gh auth login`, `codex` and `gemini`
-      # credentials survive Coolify redeploys (claude-code creds live
-      # under ~/.claude and are already covered by kroclaude-config).
-      - kroclaude-gh:/home/claude/.config/gh
-      - kroclaude-codex:/home/claude/.codex
-      - kroclaude-gemini:/home/claude/.gemini
-      # VS Code Remote-SSH downloads its server binary and any installed
-      # extensions into ~/.vscode-server on first connect. Persisting it
-      # keeps that ~200 MB install + extension state across redeploys.
-      - kroclaude-vscode:/home/claude/.vscode-server
 
   # Isolated Docker-in-Docker sidecar. Joins kroclaude's network
   # namespace so localhost-published ports (the Aspire/.NET pattern)
@@ -87,10 +109,6 @@ services:
       - dind-data:/var/lib/docker
 
 volumes:
-  kroclaude-config:
+  kroclaude-home:
   kroclaude-workspace:
-  kroclaude-gh:
-  kroclaude-codex:
-  kroclaude-gemini:
-  kroclaude-vscode:
   dind-data:

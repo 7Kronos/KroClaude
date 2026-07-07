@@ -32,10 +32,16 @@ log "Asserting claude CLI is present and runnable (as claude user)"
 as_claude 'claude --version' || fail "claude --version exited non-zero"
 
 log "Asserting FR-003 sampled tools on PATH (as claude user)"
-TOOLS="git curl wget jq rg fd tree tmux fzf bat sudo gh psql redis-cli sqlite3 ffmpeg convert chromium Xvfb python3 node npm pnpm tsx prettier eslint lighthouse gemini codex dotnet nats csharp-ls"
+TOOLS="git curl wget jq rg fd tree tmux fzf bat sudo gh psql redis-cli sqlite3 ffmpeg convert chromium Xvfb python3 node npm pnpm tsx prettier eslint lighthouse gemini codex dotnet nats csharp-ls ruby gem graphify herdr rtk supabase kubectl helm k9s kubectx kubens stern kind omnisharp"
 for t in $TOOLS; do
     as_claude "command -v $t >/dev/null" || fail "tool '$t' not on PATH for claude"
 done
+
+# graphify's /graphify skill shells out to the graphify Python package
+# (Step-1 `import graphify` probe); assert the module imports, not just
+# that the console script is on PATH.
+as_claude 'python3 -c "import graphify"' \
+    || fail "python module 'graphify' not importable for claude (graphifyy pip install)"
 
 log "Asserting 'docker exec --user claude' lands as the claude user (FR-005)"
 USER=$(as_claude 'id -un')
@@ -46,8 +52,11 @@ PID1_USER=$(in_ctn 'stat -c %U /proc/1')
 [ "$PID1_USER" = "root" ] || fail "PID 1 is '$PID1_USER', expected 'root' for s6-overlay"
 
 log "Asserting Chromium can fetch example.com via Xvfb (as claude)"
-HTML=$(as_claude 'DISPLAY=:99 chromium --headless --no-sandbox --disable-gpu --dump-dom https://example.com 2>/dev/null') || \
+if ! HTML=$(as_claude 'DISPLAY=:99 chromium --headless --no-sandbox --disable-gpu --enable-logging=stderr --dump-dom https://example.com 2>/tmp/chromium.err'); then
+    log "chromium stderr (last 40 lines):"
+    as_claude 'tail -40 /tmp/chromium.err' || true
     fail "chromium failed to fetch example.com"
+fi
 echo "$HTML" | grep -q 'Example Domain' || fail "expected 'Example Domain' in fetched HTML"
 
 log "PASS"

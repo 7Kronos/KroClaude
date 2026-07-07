@@ -34,11 +34,19 @@ optional except `ANTHROPIC_API_KEY`.
 
 Persistent named volumes (declared in [docker-compose.yaml](docker-compose.yaml)):
 
-- `kroclaude-config` → `/home/claude/.claude` — CLI config, credentials, history, bundled skills/commands/agents/etc.
+- `kroclaude-home` → `/home/claude` — the **entire home directory**:
+  claude/gh/codex/gemini credentials, `~/.kube`, `~/.docker`, VS Code
+  Remote-SSH server, shell history, bundled skills/commands/agents/etc.
 - `kroclaude-workspace` → `/workspace` — your code.
-- `kroclaude-vscode` → `/home/claude/.vscode-server` — VS Code Remote-SSH server install and installed extensions (avoids re-download on every redeploy).
 
 Both survive `docker compose down` and image rebuilds. Wipe with `down -v`.
+Upgrading from the old multi-volume layout (`kroclaude-config`/`-gh`/
+`-codex`/`-gemini`/`-vscode`)? Run
+[`scripts/migrate-volumes.sh`](scripts/migrate-volumes.sh) once while
+the stack is down.
+
+Full design (build layers, boot stages, persistence model):
+[docs/architecture.md](docs/architecture.md).
 
 ## Deploy on Coolify
 
@@ -106,7 +114,7 @@ The three seed files [`config/settings.json`](config/settings.json),
 special: they're copied into the persistent volume **once on first
 boot** (sentinel-gated). Edits to those files in the repo affect new
 deployments only — to re-seed an existing container, wipe the
-`kroclaude-config` volume.
+`kroclaude-home` volume.
 
 ## Default behaviour
 
@@ -127,15 +135,27 @@ for an isolated, ephemeral container:
   `config/settings.json` to change.
 
 Change anything you don't want and rebuild; the seed only takes
-effect the first time the `kroclaude-config` volume is empty.
+effect the first time the `kroclaude-home` volume is empty.
 
 ## Maintenance
 
-- **Update Claude Code or any tool** → `docker compose build && docker compose up -d`. Volumes survive.
+- **Bump third-party tool versions** (kubectl, helm, k9s, nats, …) —
+  all pinned in [`config/tools.json`](config/tools.json). Either merge
+  the weekly automated PR opened by the
+  [`bump-tools` workflow](.github/workflows/bump-tools.yml), or run
+  `scripts/bump-tools.sh` locally: it refreshes every pin from
+  upstream in one command — no hunting through release pages. Then
+  build + up. Base images and GitHub Actions are covered by
+  Dependabot.
+- **Update Claude Code / npm / pip tooling** → `docker compose build && docker compose up -d` (these float to latest at build time). Volumes survive.
+- **Refresh bundled plugins/marketplaces** → happens in the background
+  on every boot (`kroclaude-sync`); run `kroclaude-sync` inside the
+  container to do it on demand, or set `KROCLAUDE_SYNC_ON_BOOT=0` for
+  fully-offline boots. Log: `~/.claude/logs/kroclaude-sync.log`.
 - **Add a skill / command / agent / hook / MCP / plugin** → drop the file under `config/`, then build + up.
 - **Rotate SSH keys** → update `KROCLAUDE_SSH_AUTHORIZED_KEY` and `docker compose up -d` (recreate). The new key takes effect on the next SSH connection; the old key stops working immediately.
 - **Wipe state** → `docker compose down -v` (deletes both volumes; you lose authenticated sessions, history, hand-installed skills, and `/workspace` content).
-- **Backups** → snapshot the two named volumes (`kroclaude-config`, `kroclaude-workspace`) on whatever cadence makes sense for you. Coolify's volume backup integration covers them.
+- **Backups** → snapshot the two named volumes (`kroclaude-home`, `kroclaude-workspace`) on whatever cadence makes sense for you. Coolify's volume backup integration covers them.
 
 ## Credits
 
@@ -145,8 +165,9 @@ licensing.
 
 ## Third-party software
 
-Bundled in the image; see [Dockerfile](Dockerfile) for the authoritative
-list and versions. Highlights: Debian Trixie + s6-overlay base; Claude
+Bundled in the image; see [Dockerfile](Dockerfile) and
+[config/tools.json](config/tools.json) for the authoritative list and
+versions. Highlights: Debian Trixie + s6-overlay base; Claude
 Code, Codex, Gemini CLIs; Node.js 24 + TypeScript/Vite/esbuild/ESLint/
 Prettier; Python 3 + Playwright/pandas/httpx/etc.; Chromium + Xvfb for
 browser automation; GitHub CLI; NATS CLI; jq; Postgres/Redis/SQLite clients;

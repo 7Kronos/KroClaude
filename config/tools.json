@@ -1,0 +1,209 @@
+{
+  "//": [
+    "Pinned third-party binaries baked into the image. One entry per tool;",
+    "installed by scripts/install-tools.sh in a single Dockerfile layer.",
+    "",
+    "Never edit `version` by hand-searching release pages: run",
+    "  scripts/bump-tools.sh",
+    "to refresh every pin from upstream in one command, or let the weekly",
+    "`bump-tools` GitHub Actions workflow open the bump PR for you.",
+    "",
+    "Fields:",
+    "  repo        GitHub <owner>/<repo> — used by bump-tools.sh (releases/latest)",
+    "  version_url alternative version source returning a bare/v-prefixed version",
+    "  tag_prefix  stripped from the release tag before the leading-v strip",
+    "              (e.g. bun tags releases as bun-v1.2.3)",
+    "  version     pinned version, no leading v (REQUIRED for the build)",
+    "  install     rootfs | bin | archive-bin | archive-share",
+    "  arch        map from Docker TARGETARCH (amd64/arm64) to upstream's naming",
+    "  urls        download URL templates; {version} and {arch} are substituted",
+    "  member      (archive-bin) path of the binary inside the archive",
+    "  links       (archive-share) map of file-in-archive -> name in /usr/local/bin",
+    "  symlinks    extra names in /usr/local/bin symlinked to the tool binary"
+  ],
+  "tools": {
+    "s6-overlay": {
+      "repo": "just-containers/s6-overlay",
+      "version": "3.2.3.0",
+      "install": "rootfs",
+      "arch": {
+        "amd64": "x86_64",
+        "arm64": "aarch64"
+      },
+      "urls": [
+        "https://github.com/just-containers/s6-overlay/releases/download/v{version}/s6-overlay-noarch.tar.xz",
+        "https://github.com/just-containers/s6-overlay/releases/download/v{version}/s6-overlay-{arch}.tar.xz"
+      ]
+    },
+    "bun": {
+      "repo": "oven-sh/bun",
+      "tag_prefix": "bun-",
+      "version": "1.3.14",
+      "install": "archive-bin",
+      "member": "bun-linux-{arch}/bun",
+      "symlinks": ["bunx"],
+      "arch": {
+        "amd64": "x64",
+        "arm64": "aarch64"
+      },
+      "urls": [
+        "https://github.com/oven-sh/bun/releases/download/bun-v{version}/bun-linux-{arch}.zip"
+      ]
+    },
+    "nats": {
+      "repo": "nats-io/natscli",
+      "version": "0.4.0",
+      "install": "archive-bin",
+      "member": "nats-{version}-linux-{arch}/nats",
+      "arch": {
+        "amd64": "amd64",
+        "arm64": "arm64"
+      },
+      "urls": [
+        "https://github.com/nats-io/natscli/releases/download/v{version}/nats-{version}-linux-{arch}.zip"
+      ]
+    },
+    "supabase": {
+      "repo": "supabase/cli",
+      "version": "2.109.0",
+      "install": "archive-bin",
+      "member": "supabase",
+      "arch": {
+        "amd64": "amd64",
+        "arm64": "arm64"
+      },
+      "urls": [
+        "https://github.com/supabase/cli/releases/download/v{version}/supabase_{version}_linux_{arch}.tar.gz"
+      ]
+    },
+    "kubectl": {
+      "version_url": "https://dl.k8s.io/release/stable.txt",
+      "version": "1.36.2",
+      "install": "bin",
+      "arch": {
+        "amd64": "amd64",
+        "arm64": "arm64"
+      },
+      "urls": [
+        "https://dl.k8s.io/release/v{version}/bin/linux/{arch}/kubectl"
+      ]
+    },
+    "helm": {
+      "repo": "helm/helm",
+      "version": "4.2.2",
+      "install": "archive-bin",
+      "member": "linux-{arch}/helm",
+      "arch": {
+        "amd64": "amd64",
+        "arm64": "arm64"
+      },
+      "urls": [
+        "https://get.helm.sh/helm-v{version}-linux-{arch}.tar.gz"
+      ]
+    },
+    "k9s": {
+      "repo": "derailed/k9s",
+      "version": "0.51.0",
+      "install": "archive-bin",
+      "member": "k9s",
+      "arch": {
+        "amd64": "amd64",
+        "arm64": "arm64"
+      },
+      "urls": [
+        "https://github.com/derailed/k9s/releases/download/v{version}/k9s_Linux_{arch}.tar.gz"
+      ]
+    },
+    "kubectx": {
+      "repo": "ahmetb/kubectx",
+      "version": "0.11.0",
+      "install": "archive-bin",
+      "member": "kubectx",
+      "arch": {
+        "amd64": "x86_64",
+        "arm64": "arm64"
+      },
+      "urls": [
+        "https://github.com/ahmetb/kubectx/releases/download/v{version}/kubectx_v{version}_linux_{arch}.tar.gz"
+      ]
+    },
+    "kubens": {
+      "repo": "ahmetb/kubectx",
+      "version": "0.11.0",
+      "install": "archive-bin",
+      "member": "kubens",
+      "arch": {
+        "amd64": "x86_64",
+        "arm64": "arm64"
+      },
+      "urls": [
+        "https://github.com/ahmetb/kubectx/releases/download/v{version}/kubens_v{version}_linux_{arch}.tar.gz"
+      ]
+    },
+    "stern": {
+      "repo": "stern/stern",
+      "version": "1.34.0",
+      "install": "archive-bin",
+      "member": "stern",
+      "arch": {
+        "amd64": "amd64",
+        "arm64": "arm64"
+      },
+      "urls": [
+        "https://github.com/stern/stern/releases/download/v{version}/stern_{version}_linux_{arch}.tar.gz"
+      ]
+    },
+    "kind": {
+      "repo": "kubernetes-sigs/kind",
+      "version": "0.32.0",
+      "install": "bin",
+      "arch": {
+        "amd64": "amd64",
+        "arm64": "arm64"
+      },
+      "urls": [
+        "https://github.com/kubernetes-sigs/kind/releases/download/v{version}/kind-linux-{arch}"
+      ]
+    },
+    "herdr": {
+      "repo": "ogulcancelik/herdr",
+      "version": "0.7.1",
+      "install": "bin",
+      "arch": {
+        "amd64": "x86_64",
+        "arm64": "aarch64"
+      },
+      "urls": [
+        "https://github.com/ogulcancelik/herdr/releases/download/v{version}/herdr-linux-{arch}"
+      ]
+    },
+    "rtk": {
+      "repo": "rtk-ai/rtk",
+      "version": "0.43.0",
+      "install": "archive-bin",
+      "member": "rtk",
+      "arch": {
+        "amd64": "x86_64-unknown-linux-musl",
+        "arm64": "aarch64-unknown-linux-gnu"
+      },
+      "urls": [
+        "https://github.com/rtk-ai/rtk/releases/download/v{version}/rtk-{arch}.tar.gz"
+      ]
+    },
+    "omnisharp": {
+      "repo": "OmniSharp/omnisharp-roslyn",
+      "version": "1.39.15",
+      "install": "archive-share",
+      "links": {
+        "OmniSharp": "omnisharp"
+      },
+      "arch": {
+        "amd64": "x64",
+        "arm64": "arm64"
+      },
+      "urls": [
+        "https://github.com/OmniSharp/omnisharp-roslyn/releases/download/v{version}/omnisharp-linux-{arch}-net6.0.tar.gz"
+      ]
+    }
+  }
+}

@@ -5,11 +5,9 @@ LABEL org.opencontainers.image.source=https://github.com/7Kronos/KroClaude
 LABEL org.opencontainers.image.description="Claude Code shell environment"
 
 # ---------- Build args ----------
-# Versions default to empty: each install layer fetches the latest
-# upstream release at build time. Override per-build for reproducibility,
-# e.g. `--build-arg S6_OVERLAY_VERSION=3.2.0.2`.
-ARG S6_OVERLAY_VERSION=
-ARG NATS_CLI_VERSION=
+# Third-party binary versions are NOT build args anymore: they are
+# pinned in config/tools.json (one manifest, one installer layer).
+# Bump them with scripts/bump-tools.sh or the weekly bump-tools workflow.
 ARG TARGETARCH
 
 # ---------- Environment ----------
@@ -22,40 +20,25 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CHROME_PATH=/usr/bin/chromium \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# ---------- s6-overlay v3 (multi-arch) ----------
-# Defaults to the latest GitHub release at build time. Pin via
-# `--build-arg S6_OVERLAY_VERSION=<x.y.z.w>` for reproducible builds.
-# Both tarballs (noarch + arch-specific) are fetched via curl in this
-# RUN layer so they share one shell-resolved version variable —
-# Dockerfile `ADD` runs at parse time and cannot see RUN-computed vars.
-# `jq` is not yet installed at this layer (apt installs it later), so we
-# parse the GitHub API JSON with `grep -oP`.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    xz-utils curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-RUN if [ -z "$S6_OVERLAY_VERSION" ]; then \
-    S6_OVERLAY_VERSION=$(curl -fsSL https://api.github.com/repos/just-containers/s6-overlay/releases/latest \
-    | grep -oP '"tag_name":\s*"v\K[^"]+'); \
-    fi && \
-    S6_ARCH=$(case "$TARGETARCH" in arm64) echo "aarch64";; *) echo "x86_64";; esac) && \
-    curl -fsSL -o /tmp/s6-overlay-noarch.tar.xz \
-    "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz" && \
-    curl -fsSL -o /tmp/s6-overlay-arch.tar.xz \
-    "https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz" && \
-    tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
-    tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz && \
-    rm /tmp/s6-overlay-*.tar.xz
-
 # ---------- System packages (FR-003) ----------
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Shell core
-    git curl wget jq ripgrep fd-find unzip zip tree tmux fzf bat sudo bubblewrap \
+    # Shell core (xz-utils: install-tools.sh extracts s6-overlay .tar.xz)
+    git curl ca-certificates wget jq ripgrep fd-find unzip zip xz-utils tree tmux fzf bat sudo bubblewrap \
+    # Shell ergonomics (cherry-picked from dotfiles/home.nix — starship
+    # installed separately below since trixie's package is too old)
+    zsh direnv zoxide eza btop git-delta lazygit \
+    # Language servers (C / C++ — clangd). Other LSPs install via npm
+    # and gem below; csharp-ls via dotnet tool further down.
+    clangd \
     # Build & language toolchain (Node provided by base image)
     build-essential pkg-config python3 python3-pip python3-venv pipx \
+    ruby-full \
     # .NET runtime dep (libssl3 / libstdc++6 / zlib1g already pulled by base)
     libicu76 \
-    # Browser automation stack (FR-003b)
-    chromium xvfb \
+    # Browser automation stack (FR-003b). NOTE: chromium itself is
+    # TEMPORARILY installed by the pinned layer just below, not here —
+    # see the Debian #1141488 comment.
+    xvfb \
     fonts-liberation2 fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji \
     # Locale
     locales \
@@ -68,6 +51,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Media
     imagemagick ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+
+# ---------- TEMPORARY: chromium pinned to 149 (Debian bug #1141488) ----------
+# trixie-security's chromium 150.0.7871.46-1~deb13u1 crashes with SIGTRAP
+# ("Trace/breakpoint trap") on EVERY launch, fresh profiles included: an
+# ungoogled patch removed the {google:searchSource} handler while the
+# built-in Google search template still emits the token → NOTREACHED().
+# That breaks the whole FR-003b browser-automation stack — bare chromium,
+# puppeteer, and playwright alike. Until Debian ships the fix, install
+# the last-good 149 build from snapshot.debian.org via immutable
+# content-hash URLs (stable, arch-specific), and hold the packages.
+#
+# REVERT when trixie-security ships a chromium with #1141488 fixed
+# (https://bugs.debian.org/1141488): delete this layer and put
+# `chromium` back in the apt list above.
+RUN set -e; \
+    case "$TARGETARCH" in \
+    arm64) CHROMIUM=0a6923b2ba8a50de74ed744a8680db505a22d0dc; \
+    COMMON=e337bf346620b9a567a334447bbdef48c209e8d7; \
+    SANDBOX=27f0797606f1f66e278e4cc4d933f619367ee487;; \
+    *)     CHROMIUM=122a1721a282240e07dcc9f8f769d0a40361b789; \
+    COMMON=baabe01daaf628d599e14cf331d8b7cd1453e384; \
+    SANDBOX=52dbf5c3edb4e7e4e2ea6e10b655f738fb962617;; \
+    esac; \
+    for h in $CHROMIUM $COMMON $SANDBOX; do \
+    curl -fsSL --retry 3 -o "/tmp/chromium-$h.deb" "https://snapshot.debian.org/file/$h"; \
+    done; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends /tmp/chromium-*.deb; \
+    apt-mark hold chromium chromium-common chromium-sandbox; \
+    rm -f /tmp/chromium-*.deb; rm -rf /var/lib/apt/lists/*
 
 # Codex CLI sandbox helper requires bwrap setuid on restricted kernels
 RUN chmod u+s /usr/bin/bwrap
@@ -95,29 +108,6 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
     docker-ce-cli docker-buildx-plugin docker-compose-plugin && \
     rm -rf /var/lib/apt/lists/*
 
-# ---------- NATS CLI ----------
-# https://github.com/nats-io/natscli — admin/diagnostic CLI for NATS
-# servers, JetStream, KV / object stores. No apt feed; ships per-arch zip
-# archives that extract to nats-<ver>-linux-<arch>/nats. Multi-arch via
-# TARGETARCH (matches the s6-overlay pattern). The binary lands in
-# /usr/local/bin so it's on PATH for interactive shells and entrypoint.
-# Defaults to the latest GitHub release at build time; pin via
-# `--build-arg NATS_CLI_VERSION=<x.y.z>` for reproducible builds. `jq` is
-# available at this layer (installed in the system-packages layer above)
-# so we parse the GitHub API JSON with it. The same shell-resolved
-# version variable is used for both the download URL and the unzip
-# subpath (`nats-<ver>-linux-<arch>/nats`).
-RUN if [ -z "$NATS_CLI_VERSION" ]; then \
-    NATS_CLI_VERSION=$(curl -fsSL https://api.github.com/repos/nats-io/natscli/releases/latest \
-    | jq -r .tag_name | tr -d v); \
-    fi && \
-    NATS_ARCH=$(case "$TARGETARCH" in arm64) echo "arm64";; *) echo "amd64";; esac) && \
-    curl -fsSL -o /tmp/nats.zip \
-    "https://github.com/nats-io/natscli/releases/download/v${NATS_CLI_VERSION}/nats-${NATS_CLI_VERSION}-linux-${NATS_ARCH}.zip" && \
-    unzip -j /tmp/nats.zip "nats-${NATS_CLI_VERSION}-linux-${NATS_ARCH}/nats" -d /usr/local/bin && \
-    chmod +x /usr/local/bin/nats && \
-    rm /tmp/nats.zip
-
 # ---------- bat / fd symlinks (Debian names them batcat / fdfind) + locale ----------
 RUN ln -sf /usr/bin/batcat /usr/local/bin/bat 2>/dev/null || true && \
     ln -sf /usr/bin/fdfind /usr/local/bin/fd 2>/dev/null || true && \
@@ -129,24 +119,32 @@ RUN usermod -l claude -d /home/claude -m node && \
     echo "claude ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/claude && \
     chmod 0440 /etc/sudoers.d/claude
 
-# ---------- Claude Code CLI (FR-002) ----------
-# WORKDIR must be non-root-owned or the installer hangs.
+# ---------- /workspace ownership ----------
+# The workspace volume inherits ownership from this directory on first
+# creation (Docker copy-up).
 WORKDIR /workspace
 RUN chown claude:claude /workspace
-USER claude
-RUN curl -fsSL https://claude.ai/install.sh | bash
-USER root
+
+# ~/.local/bin stays on PATH for user-installed tools (uv tool, pipx),
+# which now persist on the home volume.
 ENV PATH="/home/claude/.local/bin:${PATH}"
 
 # /etc/environment is read by pam_env (UsePAM yes in sshd_config) so SSH
 # sessions inherit the same PATH that ENV PATH gives the entrypoint.
-# DOCKER_HOST is baked here too so login/SSH shells point at the dind
-# sidecar instead of the missing /var/run/docker.sock.
-RUN printf 'PATH="/home/claude/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\nDOCKER_HOST="tcp://localhost:2375"\n' \
-    > /etc/environment
+# Its content is single-sourced from config/environment.d/: the baseline
+# bake happens in the "Bundled Claude Code customization" layer below,
+# and entrypoint stage 60 regenerates it on every boot with the
+# compose-supplied passthrough vars appended.
 
 # ---------- npm global packages (FR-003, FR-003a) ----------
+# Claude Code (FR-002) installs HERE, system-wide via the official npm
+# package — NOT via claude.ai/install.sh into ~/.local/bin. /home/claude
+# is a persistent volume, so a home-dir install would freeze the CLI at
+# whatever version the volume first captured; a system install means
+# `docker compose build` actually updates it. Autoupdater is disabled in
+# config/settings.json (DISABLE_AUTOUPDATER=1) — rebuild to update.
 RUN npm i -g \
+    @anthropic-ai/claude-code \
     typescript tsx \
     pnpm \
     vite esbuild \
@@ -156,7 +154,16 @@ RUN npm i -g \
     lighthouse \
     @owloops/claude-powerline \
     @google/gemini-cli \
-    @openai/codex
+    @openai/codex \
+    oh-my-claude-sisyphus \
+    typescript-language-server \
+    pyright \
+    bash-language-server \
+    yaml-language-server \
+    vscode-langservers-extracted \
+    dockerfile-language-server-nodejs \
+    @astrojs/language-server \
+    @vue/language-server
 
 # ---------- uv (Astral standalone installer — self-contained binary) ----------
 # Installed as the recommended path per Astral's docs (avoids polluting
@@ -165,6 +172,12 @@ RUN npm i -g \
 # `/tt-install-speckit` assumes `uv` is on PATH.
 RUN curl -LsSf https://astral.sh/uv/install.sh \
     | UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
+
+# ---------- starship (prompt) ----------
+# Vendor install script lands the binary at /usr/local/bin/starship —
+# trixie's apt package lags upstream substantially. The `--yes` flag
+# accepts the EULA and skips the interactive overwrite prompt.
+RUN curl -sS https://starship.rs/install.sh | sh -s -- --yes
 
 # ---------- .NET SDKs (9, 10, 11-preview, side-by-side) ----------
 # Microsoft's dotnet-install.sh handles side-by-side majors in one
@@ -183,14 +196,22 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
     rm /tmp/dotnet-install.sh && \
     ln -sf "$DOTNET_ROOT/dotnet" /usr/local/bin/dotnet
 
-# ---------- csharp-ls (.NET global tool, used by the bundled csharp-lsp plugin) ----------
-# Installed via `dotnet tool install` rather than the standalone OmniSharp-Roslyn
-# tarball because the `csharp-lsp` plugin in marketplace.json shells out to the
-# `csharp-ls` binary (razzmatazz/csharp-language-server). `--tool-path` installs
-# system-wide into /usr/local/bin (already on PATH for claude, entrypoint, and
-# SSH sessions); `--global` would land in /root/.dotnet/tools and miss the
-# claude user. Always installs the latest release at build time.
+# OmniSharp (.NET LSP for the OMC csharp plugin) installs via the
+# tools.json manifest layer further down. Its net6.0 build declares
+# `rollForward: LatestMajor`, so it runs on the .NET 9/10/11 installed
+# here without a separate .NET 6 runtime.
+
+# ---------- csharp-ls (alternate .NET LSP) ----------
+# Kept alongside OmniSharp so the upstream `csharp-lsp@claude-plugins-
+# official` plugin (which shells out to `csharp-ls`) keeps working.
+# Different binary name, no conflict with the omnisharp install above.
 RUN dotnet tool install csharp-ls --tool-path /usr/local/bin
+
+# ---------- ruby-lsp (Ruby language server, Shopify) ----------
+# Installed system-wide via the ruby-full gem env from the apt block.
+# `--no-document` skips rdoc/ri generation to keep the layer small.
+# Binary stub lands on PATH via the gem environment's default bin dir.
+RUN gem install --no-document ruby-lsp
 
 # ---------- Python packages (FR-003) ----------
 RUN pip install --no-cache-dir --break-system-packages \
@@ -202,7 +223,39 @@ RUN pip install --no-cache-dir --break-system-packages \
     rich click tqdm \
     playwright \
     apprise \
-    xlsxwriter
+    xlsxwriter \
+    python-lsp-server
+
+# ---------- graphify (knowledge-graph skill + CLI) ----------
+# https://github.com/safishamsi/graphify — turns any input (code, docs,
+# papers, images) into a navigable knowledge graph with community
+# detection. The PyPI distribution is `graphifyy` (double-y); it exposes
+# the `graphify` console script that the bundled /graphify skill
+# (config/skills/graphify/) shells out to. Installing it here means the
+# skill's Step-1 `import graphify` probe succeeds with no runtime pip
+# install. Pulls tree-sitter language bindings + networkx/graspologic.
+# PINNED (unlike the unpinned Python-packages layer above) because the
+# vendored SKILL.md is frozen against this release and imports PRIVATE
+# internals (`graphify.detect`, `graphify.extract`) that carry no
+# stability guarantee — an unpinned bump could break the skill silently.
+# When bumping this pin, re-vendor config/skills/graphify/SKILL.md from
+# the matching upstream tag. Same `--break-system-packages` as above.
+RUN pip install --no-cache-dir --break-system-packages graphifyy==0.9.4
+
+# ---------- Third-party binaries (manifest-driven, feature: simplify-stack) ----------
+# s6-overlay, nats, supabase, kubectl, helm, k9s, kubectx, kubens, stern,
+# kind, herdr, rtk, OmniSharp — all pinned in config/tools.json and
+# installed by one generic script in one layer. To add a tool: add a
+# manifest entry. To bump versions: `scripts/bump-tools.sh` (or wait for
+# the weekly bump-tools workflow PR). No GitHub API calls happen during
+# the build — versions are resolved at bump time, not build time.
+# Cluster credentials are NOT baked in — populate ~/.kube at runtime.
+# Placed AFTER the npm/pip/dotnet layers so a routine version bump only
+# rebuilds from here down, keeping the heavy language layers cached.
+COPY config/tools.json        /usr/local/share/kroclaude/tools.json
+COPY scripts/install-tools.sh /usr/local/bin/install-tools.sh
+RUN chmod +x /usr/local/bin/install-tools.sh && \
+    install-tools.sh /usr/local/share/kroclaude/tools.json
 
 # ---------- s6-overlay service definitions ----------
 COPY s6-overlay/s6-rc.d/xvfb/type /etc/s6-overlay/s6-rc.d/xvfb/type
@@ -219,10 +272,18 @@ COPY s6-overlay/s6-rc.d/sshd/run      /etc/s6-overlay/s6-rc.d/sshd/run
 RUN chmod +x /etc/s6-overlay/s6-rc.d/sshd/run && \
     touch /etc/s6-overlay/s6-rc.d/user/contents.d/sshd
 
-# ---------- Helper scripts and default configs ----------
-COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY scripts/notify.py     /usr/local/bin/notify.py
-COPY scripts/rm-guard.sh   /usr/local/bin/rm-guard.sh
+# ---------- Helper scripts, entrypoint stages, merge filters ----------
+# entrypoint.sh is a ~20-line driver; the actual boot logic lives in
+# lex-ordered stages under /etc/kroclaude/entrypoint.d/ (one concern
+# each, individually testable). kroclaude-sync holds ALL boot-time
+# network work and runs backgrounded (stage 80) or on demand.
+COPY scripts/entrypoint.sh     /usr/local/bin/entrypoint.sh
+COPY scripts/entrypoint-lib.sh /etc/kroclaude/entrypoint-lib.sh
+COPY scripts/entrypoint.d/     /etc/kroclaude/entrypoint.d/
+COPY scripts/filters/          /usr/local/share/kroclaude/filters/
+COPY scripts/kroclaude-sync    /usr/local/bin/kroclaude-sync
+COPY scripts/notify.py         /usr/local/bin/notify.py
+COPY scripts/rm-guard.sh       /usr/local/bin/rm-guard.sh
 # ---------- Bundled Claude Code customization (feature 005-config-bundling) ----------
 # Single read-only image-time copy of the entire /config/ tree, replacing
 # the granular per-file COPYs and the legacy /skills/ COPY. The entrypoint
@@ -231,56 +292,36 @@ COPY scripts/rm-guard.sh   /usr/local/bin/rm-guard.sh
 # feature 001 contract preserved). See specs/005-config-bundling/.
 COPY config/ /usr/local/share/kroclaude/config/
 
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/notify.py /usr/local/bin/rm-guard.sh && \
-    install -d -o claude -g claude /home/claude/.claude
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/kroclaude-sync \
+    /usr/local/bin/notify.py /usr/local/bin/rm-guard.sh && \
+    chmod 0755 /etc/kroclaude/entrypoint.d/*.sh && \
+    # Baseline /etc/environment (single-sourced; see config/environment.d/).
+    # Covers images started with a non-default entrypoint that skips the
+    # boot-time regeneration in stage 60.
+    grep -v '^\s*#' /usr/local/share/kroclaude/config/environment.d/static.env \
+    | grep -v '^\s*$' > /etc/environment && \
+    install -d -o claude -g claude /home/claude/.claude && \
+    # The kroclaude-home volume is seeded from the image's /home/claude on
+    # first creation (Docker named-volume copy-up) — make sure everything
+    # it copies is claude-owned.
+    chown -R claude:claude /home/claude
 
-# ---------- Bash history persistence (research R9) ----------
-RUN printf '\nexport HISTFILE=/home/claude/.claude/.bash_history\nexport HISTSIZE=10000\nexport HISTFILESIZE=20000\n' \
-    >> /home/claude/.bashrc && \
-    chown claude:claude /home/claude/.bashrc
-
-# ---------- `remote` shell function (claude remote-control launcher) ----------
-# Convenience launcher: spins up a Remote Control server in $PWD (controllable
-# from claude.ai/code), spawns one isolated git worktree per on-demand session,
-# prefixes session names with $(basename $PWD), runs sessions with permissions
-# bypassed, and pre-flags $PWD as trusted in ~/.claude.json so the workspace-
-# trust dialog never blocks bootstrap. ~/.claude.json is a symlink into the
-# persistent ~/.claude/ volume — the jq edit writes through `cat >` (not mv)
-# so we don't replace the symlink with a regular file.
-RUN <<'DOCKERFILE'
-cat >> /home/claude/.bashrc <<'BASHRC'
-
-remote() {
-    local prefix
-    prefix=$(basename "$PWD")
-
-    if command -v jq >/dev/null 2>&1 && [ -e "$HOME/.claude.json" ]; then
-        local tmp
-        if tmp=$(mktemp) && jq --arg p "$PWD" \
-                '.projects[$p] = ((.projects[$p] // {}) + {hasTrustDialogAccepted: true})' \
-                "$HOME/.claude.json" > "$tmp"; then
-            cat "$tmp" > "$HOME/.claude.json"
-        fi
-        [ -n "${tmp:-}" ] && rm -f "$tmp"
-    fi
-
-    claude remote-control \
-        --spawn worktree \
-        --remote-control-session-name-prefix "$prefix" \
-        --permission-mode bypassPermissions \
-        "$@"
-}
-BASHRC
-chown claude:claude /home/claude/.bashrc
-DOCKERFILE
-
-# ---------- Land interactive logins in /workspace (feature 003) ----------
-# /etc/profile sources /etc/profile.d/*.sh for login shells (interactive
-# SSH login, `bash -l`). Non-interactive `ssh user@host cmd` invocations
-# stay in the user's HOME per standard SSH convention.
-RUN printf 'if [ -d /workspace ] && [ "$PWD" = "$HOME" ]; then cd /workspace; fi\n' \
-    > /etc/profile.d/kroclaude.sh && \
-    chmod 0644 /etc/profile.d/kroclaude.sh
+# ---------- Shell configuration (config/shell/, installed system-level) ----------
+# Interactive-shell setup lives in versioned files instead of Dockerfile
+# heredocs, and installs to /etc rather than appending to ~/.bashrc — so
+# it is diffable in review AND keeps applying when /home/claude is a
+# volume (a volume shadows image-baked home files after first creation).
+# Coverage: Debian's /etc/profile sources /etc/bash.bashrc for login
+# shells (SSH), and interactive non-login bash (docker exec -it … bash)
+# reads /etc/bash.bashrc directly — the loader below covers both.
+# NOTE: a non-interactive `docker exec kroclaude claude ...` (no -it)
+# sources neither and still inherits ANTHROPIC_API_KEY from PID 1 —
+# acceptable; the documented usage is interactive exec / SSH.
+COPY config/shell/profile.d/kroclaude.sh /etc/profile.d/kroclaude.sh
+COPY config/shell/bashrc.d/              /etc/kroclaude/bashrc.d/
+RUN chmod 0644 /etc/profile.d/kroclaude.sh /etc/kroclaude/bashrc.d/*.sh && \
+    printf '\n# KroClaude shell setup (source: config/shell/bashrc.d/ in the repo)\nfor _kc in /etc/kroclaude/bashrc.d/*.sh; do [ -r "$_kc" ] && . "$_kc"; done\nunset _kc\n' \
+    >> /etc/bash.bashrc
 
 # ---------- Working directory ----------
 WORKDIR /workspace
