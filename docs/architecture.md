@@ -71,7 +71,7 @@ and source [`entrypoint-lib.sh`](../scripts/entrypoint-lib.sh).
 | `10-home-seed.sh` | First-boot sentinel seed (settings.json, CLAUDE.md, claude-powerline.json), `~/.claude.json`, `/workspace/.omc-workspace` marker, codex/gemini/starship seeds, pre-refactor dotdir adoption |
 | `20-git-identity.sh` | `GIT_USER_*` env → `~/.gitconfig`, `safe.directory` |
 | `30-reflect-config.sh` | Bundled customization reflection (below) |
-| `40-mcp.sh` | `claude mcp` user-scope registration (local config writes) |
+| `40-mcp.sh` | `claude mcp` + `codex mcp` user-scope registration (local config writes) |
 | `45-nuget.sh` | NuGet "GitHub" source from `NUGET_REGISTRY_*` env (local config write) |
 | `50-ssh.sh` | Host keys (once, persisted), `authorized_keys` (every boot from env) |
 | `60-environment.sh` | Renders `/etc/environment` from `config/environment.d/` |
@@ -99,6 +99,14 @@ tests in [`tests/unit/test_merge_filters.sh`](../tests/unit/test_merge_filters.s
 Precedence: fragments merge in filename-lex order (later wins);
 bundled beats target; user items with non-colliding names are never
 touched. Contracts: [`specs/005-config-bundling/contracts/`](../specs/005-config-bundling/contracts/).
+
+Codex parity: `config/skills/` additionally reflects into
+`~/.agents/skills/` (the [agent-skills standard](https://agentskills.io)
+path Codex reads), with the same collision semantics. Plugins are
+deliberately claude-only. Codex also gets a seeded global
+`~/.codex/AGENTS.md` (stage 10, create-if-missing, from
+`config/per-cli/codex/`) and the same MCP servers via `codex mcp add`
+(stage 40).
 
 ## Persistence
 

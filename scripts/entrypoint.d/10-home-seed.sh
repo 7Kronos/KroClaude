@@ -44,7 +44,8 @@ fi
 # and the seed must come back. Each write is create-if-missing so
 # user-edited files are never overwritten. Source files live under
 # $SOURCE_DIR/per-cli/<cli>/<file>; mirrored into ~/.<cli>/<file>.
-install -d -o claude -g claude "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini"
+install -d -o claude -g claude "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini" \
+    "$CLAUDE_HOME/.agents/skills"
 for src in "$SOURCE_DIR"/per-cli/codex/* "$SOURCE_DIR"/per-cli/gemini/*; do
     [ -f "$src" ] || continue
     cli=$(basename "$(dirname "$src")")        # codex | gemini

@@ -13,5 +13,5 @@ set -euo pipefail
 chown claude:claude "$CLAUDE_HOME" "$CLAUDE_HOME/.claude.json"
 [ -f "$CLAUDE_HOME/.gitconfig" ] && chown claude:claude "$CLAUDE_HOME/.gitconfig"
 chown -R claude:claude "$CONFIG_DIR" \
-    "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini" \
+    "$CLAUDE_HOME/.codex" "$CLAUDE_HOME/.gemini" "$CLAUDE_HOME/.agents" \
     "$CLAUDE_HOME/.config" "$CLAUDE_HOME/.ssh"
