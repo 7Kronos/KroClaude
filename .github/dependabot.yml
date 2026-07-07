@@ -1,0 +1,19 @@
+# Dependabot covers what scripts/bump-tools.sh does not:
+#   - the Docker base images (node:lts-trixie, docker:27-dind)
+#   - the GitHub Actions used by the workflows
+# Third-party tool binaries are handled by config/tools.json +
+# .github/workflows/bump-tools.yml instead.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

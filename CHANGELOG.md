@@ -8,7 +8,49 @@ Image tag versions are independent of the project constitution version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chromium pinned to 149.0.7827.196 (TEMPORARY)**: trixie-security's
+  chromium 150.0.7871.46 crashes with SIGTRAP on every launch (Debian
+  bug #1141488 — unhandled `{google:searchSource}` template token),
+  breaking headless browsing, puppeteer, and playwright. CI had been
+  red on US1 since the update. The last-good 149 build installs from
+  snapshot.debian.org and is apt-held; revert the pin layer in the
+  Dockerfile once Debian ships the fix. Note: the weekly Trivy scan may
+  flag 149 until then.
+
 ### Changed
+
+- **Simplify-stack refactor** (#8): the build and runtime are
+  restructured for maintainability; functional surface unchanged.
+  - **Tool manifest**: the ~11 hand-rolled "download latest GitHub
+    release" Dockerfile layers are replaced by pinned entries in
+    `config/tools.json` + one `scripts/install-tools.sh` layer. Bump
+    all pins with `scripts/bump-tools.sh`, via the weekly `bump-tools`
+    workflow PR, or not at all — builds are reproducible now.
+    Dependabot covers base images and Actions.
+  - **Single home volume**: `/home/claude` is one `kroclaude-home`
+    volume, replacing `kroclaude-config`/`-gh`/`-codex`/`-gemini`/
+    `-vscode` plus all persist_dotdir symlinks and HELM/K9S env
+    redirects. **Migration**: run `scripts/migrate-volumes.sh` on the
+    host while the stack is down; in-container dotdir adoption is
+    automatic on next boot.
+  - **Offline-safe boot**: the entrypoint is split into single-concern
+    stages under `scripts/entrypoint.d/`; all boot-time network work
+    (marketplaces, plugins, call-me-pilot, playwright-skill) moved to
+    `kroclaude-sync`, backgrounded on boot (`KROCLAUDE_SYNC_ON_BOOT=0`
+    to disable) and runnable on demand.
+  - **Shell config as files** (`config/shell/` → `/etc`), **env
+    manifest** (`config/environment.d/` → `/etc/environment`), jq merge
+    filters extracted to `scripts/filters/` with offline unit tests,
+    `omc-init` compose service folded into the entrypoint, and
+    `docs/architecture.md` added as the single current design doc.
+  - Claude Code now installs system-wide via the official npm package
+    (was claude.ai/install.sh into `~/.local/bin` — a home-dir install
+    would freeze the CLI at whatever version the new home volume first
+    captured; system-wide, `docker compose build` updates it again).
+  - Note: pinning helm to latest lands helm 4.x (the old build's
+    "latest at build time" behavior would too).
 
 - **Deployment-process simplification pass**: entrypoint, Dockerfile,
   fetch-plugins, smoke tests, and CI all reworked for maintainability.

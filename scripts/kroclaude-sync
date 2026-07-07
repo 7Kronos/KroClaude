@@ -1,0 +1,86 @@
+#!/bin/bash
+# kroclaude-sync — install/update bundled marketplaces, plugins, cloned
+# skills, and the call-me-pilot CLI. This is ALL of the boot-time
+# network work, moved out of the entrypoint: stage 80 backgrounds it on
+# every boot (KROCLAUDE_SYNC_ON_BOOT=1, the default), and it can be run
+# manually as the claude user any time:
+#
+#   kroclaude-sync
+#
+# Shaped for re-entry — `add` calls swallow "already exists" errors,
+# `update` does the real refresh, and every step is best-effort: one
+# broken marketplace/plugin never blocks the others (FR-009 spirit).
+# Exit code is always 0; read the log lines for per-item outcomes.
+set -uo pipefail  # deliberately NOT -e: every step is best-effort
+
+log()  { echo "[kroclaude-sync] $*"; }
+warn() { echo "[kroclaude-sync] WARN: $*" >&2; }
+
+CONFIG_DIR="$HOME/.claude"
+log "sync started $(date -Is 2>/dev/null || true)"
+
+# ---------- Git/gh auth for private plugin repos ----------
+# Prefer the persisted `gh auth login` OAuth and only fall back to the
+# deployment-supplied PAT — an invalid PAT must never shadow a working
+# login (same precedence trap as ANTHROPIC_API_KEY / `claude login`).
+# The token is passed per-command via env GH_TOKEN, never exported
+# globally or persisted: `gh auth git-credential` resolves auth at run
+# time, so interactive shells keep using hosts.yml. No token -> the
+# private steps below fail non-fatally; public marketplaces unaffected.
+GH_BOOT_TOKEN="$(gh auth token 2>/dev/null || true)"
+[ -n "$GH_BOOT_TOKEN" ] || GH_BOOT_TOKEN="${GITHUB_PERSONAL_ACCESS_TOKEN:-}"
+if [ -n "$GH_BOOT_TOKEN" ]; then
+    env GH_TOKEN="$GH_BOOT_TOKEN" gh auth setup-git >/dev/null 2>&1 \
+        || warn "gh auth setup-git failed; private plugins may not install"
+fi
+
+# ---------- Marketplaces: add (no-op once present), then update all ----------
+for m in github:anthropics/claude-plugins-official \
+         github:thedotmack/claude-mem \
+         github:Yeachan-Heo/oh-my-claudecode \
+         github:7Kronos/gravity \
+         github:7Kronos/call-me-pilot; do
+    claude plugin marketplace add "$m" >/dev/null 2>&1 || true
+done
+claude plugin marketplace update \
+    || warn "failed to update marketplaces"
+
+# ---------- Plugins: install (idempotent) then update each ----------
+for p in csharp-lsp@claude-plugins-official \
+         commit-commands@claude-plugins-official \
+         feature-dev@claude-plugins-official \
+         claude-mem@claude-mem \
+         oh-my-claudecode@oh-my-claudecode \
+         gravity-dsl@gravity \
+         cmpilot@call-me-pilot; do
+    claude plugin install "$p" >/dev/null 2>&1 \
+        || warn "failed to install plugin $p"
+    claude plugin update "${p%@*}" >/dev/null 2>&1 || true
+done
+
+# ---------- call-me-pilot standalone CLI (private 7Kronos repo) ----------
+# Fetch the installer with an auth header — raw.githubusercontent needs
+# it for private repos, unlike the git credential helper above — then
+# pipe to bash. Its internal `git clone https://…` authenticates via the
+# credential helper, and `cmpilot setup` lands the CLI. timeout-guarded
+# so a stall can't wedge the sync; token-gated like the plugin steps.
+if [ -n "$GH_BOOT_TOKEN" ]; then
+    env GH_TOKEN="$GH_BOOT_TOKEN" timeout 180 bash -c \
+        'curl -fsSL -H "Authorization: token $GH_TOKEN" https://raw.githubusercontent.com/7Kronos/call-me-pilot/master/install.sh | bash' \
+        >/dev/null 2>&1 \
+        || warn "call-me-pilot install.sh failed"
+fi
+
+# ---------- playwright-skill: plain skill, clone or fast-forward ----------
+if [ -d "$CONFIG_DIR/skills/playwright-skill/.git" ]; then
+    git -C "$CONFIG_DIR/skills/playwright-skill" pull --ff-only --quiet \
+        || warn "failed to update playwright-skill"
+elif [ ! -d "$CONFIG_DIR/skills/playwright-skill" ]; then
+    git clone --depth 1 \
+        https://github.com/lackeyjb/playwright-skill \
+        "$CONFIG_DIR/skills/playwright-skill" \
+        || warn "failed to clone playwright-skill"
+fi
+
+log "sync finished"
+exit 0
