@@ -22,9 +22,9 @@ first, weekly-changing last:
    dind sidecar).
 3. **claude user** — the base image's `node` user (UID 1000) renamed.
 4. **Claude Code CLI**, **npm globals**, **uv**, **starship**,
-   **.NET SDKs**, **ruby-lsp**, **pip packages** — language runtimes
-   and tooling. These float ("latest at build time") deliberately;
-   they only rebuild when the Dockerfile itself changes.
+   **.NET SDKs**, **ruby-lsp**, **serena**, **pip packages** — language
+   runtimes and tooling. These float ("latest at build time")
+   deliberately; they only rebuild when the Dockerfile itself changes.
 5. **Third-party binaries** — everything in
    [`config/tools.json`](../config/tools.json), installed by
    [`scripts/install-tools.sh`](../scripts/install-tools.sh) in ONE
@@ -54,9 +54,9 @@ Nobody hand-searches release pages:
 - [`dependabot.yml`](../.github/dependabot.yml) — covers what the
   script does not: Docker base images (`node:lts-trixie`,
   `docker:27-dind`) and GitHub Actions versions.
-- Floating installers (Claude Code, starship, uv, dotnet channels,
-  npm/pip packages) intentionally track latest at build time; rebuild
-  to refresh them.
+- Floating installers (Claude Code, starship, uv, serena, dotnet
+  channels, npm/pip packages) intentionally track latest at build time;
+  rebuild to refresh them.
 
 ## Boot (entrypoint)
 

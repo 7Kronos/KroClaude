@@ -38,6 +38,12 @@ rules.
 - Kubernetes: `kubectl`, `helm`, `k9s`, `kubectx`/`kubens`, `stern`,
   `kind` (pairs with the dind sidecar). Also `nats`, `supabase`.
 - Media: `imagemagick`, `ffmpeg`.
+- MCP servers (pre-registered): `context7`, `filesystem`, `serena`;
+  `exa`/`github`/`coolify` appear when their env keys are set. For
+  symbol-level code questions — find references/call sites, go to
+  definition, hover types, post-edit diagnostics — prefer serena's
+  tools over `grep`/`rg`; text search stays right for strings, config
+  keys, and broad discovery.
 
 If a needed tool is missing, `sudo apt-get install <pkg>` or use a
 language-specific installer; `sudo` is passwordless for the `claude`

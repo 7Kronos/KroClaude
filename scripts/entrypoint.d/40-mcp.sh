@@ -13,7 +13,7 @@
 set -euo pipefail
 . /etc/kroclaude/entrypoint-lib.sh
 
-for name in context7 filesystem exa github; do
+for name in context7 filesystem serena exa github; do
     runuser -u claude -- claude mcp remove "$name" >/dev/null 2>&1 || true
 done
 
@@ -23,6 +23,11 @@ runuser -u claude -- claude mcp add --scope user context7 -- \
 runuser -u claude -- claude mcp add --scope user filesystem -- \
     npx -y @modelcontextprotocol/server-filesystem /workspace \
     || warn "failed to add filesystem MCP"
+# Contexts per Serena's client docs; --project-from-cwd activates the
+# project from wherever the CLI is launched.
+runuser -u claude -- claude mcp add --scope user serena -- \
+    serena start-mcp-server --context claude-code --project-from-cwd \
+    || warn "failed to add serena MCP"
 
 if [ -n "${EXA_API_KEY:-}" ]; then
     runuser -u claude -- claude mcp add --scope user -e "EXA_API_KEY=$EXA_API_KEY" exa -- \
@@ -38,7 +43,7 @@ if [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
 fi
 
 # ---------- codex ----------
-for name in context7 filesystem exa github coolify; do
+for name in context7 filesystem serena exa github coolify; do
     runuser -u claude -- codex mcp remove "$name" >/dev/null 2>&1 || true
 done
 
@@ -48,6 +53,12 @@ runuser -u claude -- codex mcp add context7 -- \
 runuser -u claude -- codex mcp add filesystem -- \
     npx -y @modelcontextprotocol/server-filesystem /workspace \
     || warn "failed to add filesystem MCP (codex)"
+# Serena's docs suggest startup_timeout_sec = 15 for codex (first spawn
+# may download a language server); `codex mcp add` can't set it — bump
+# it in ~/.codex/config.toml if the default ever proves too tight.
+runuser -u claude -- codex mcp add serena -- \
+    serena start-mcp-server --context codex --project-from-cwd \
+    || warn "failed to add serena MCP (codex)"
 
 if [ -n "${EXA_API_KEY:-}" ]; then
     runuser -u claude -- codex mcp add exa --env "EXA_API_KEY=$EXA_API_KEY" -- \

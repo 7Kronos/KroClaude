@@ -242,6 +242,19 @@ RUN pip install --no-cache-dir --break-system-packages \
 # the matching upstream tag. Same `--break-system-packages` as above.
 RUN pip install --no-cache-dir --break-system-packages graphifyy==0.9.4
 
+# ---------- Serena (LSP-powered semantic code toolkit, MCP server) ----------
+# https://github.com/oraios/serena — registered for both claude and
+# codex in entrypoint stage 40. Installed SYSTEM-LEVEL via `uv tool`:
+# /home/claude is a persistent volume, so a default ~/.local install
+# would be shadowed/frozen at runtime (same rationale as the npm layer
+# above). UV_PYTHON_INSTALL_DIR keeps any uv-managed interpreter out of
+# /root, where the claude user couldn't read it. Serena downloads its
+# per-language servers lazily at runtime into ~/.serena (persistent).
+RUN UV_TOOL_DIR=/usr/local/share/uv/tools \
+    UV_TOOL_BIN_DIR=/usr/local/bin \
+    UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python \
+    uv tool install -p 3.13 serena-agent
+
 # ---------- Third-party binaries (manifest-driven, feature: simplify-stack) ----------
 # s6-overlay, nats, supabase, kubectl, helm, k9s, kubectx, kubens, stern,
 # kind, herdr, rtk, OmniSharp — all pinned in config/tools.json and

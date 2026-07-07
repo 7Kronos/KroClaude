@@ -62,6 +62,9 @@ in_ctn 'test -f /home/claude/.codex/hooks.json'  || fail "codex hooks.json not s
 in_ctn 'test -f /home/claude/.codex/AGENTS.md'   || fail "codex AGENTS.md not seeded"
 in_ctn 'test -f /home/claude/.gemini/settings.json' || fail "gemini settings.json not seeded"
 as_claude 'codex mcp list | grep -q context7' || fail "codex context7 MCP not registered"
+as_claude 'codex mcp list | grep -q serena' || fail "codex serena MCP not registered"
+as_claude 'jq -e ".mcpServers.serena" /home/claude/.claude.json >/dev/null' \
+    || fail "claude serena MCP not registered"
 
 # ---------- Scenario 2: workspace persistence across down/up ----------
 log "Scenario 2 — workspace persistence across down/up"

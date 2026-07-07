@@ -41,6 +41,12 @@ rules.
 - `kroclaude-sync` — refreshes bundled plugin marketplaces, plugins,
   and cloned skills on demand (also runs in the background at boot;
   log: `~/.claude/logs/kroclaude-sync.log`).
+- MCP servers (pre-registered, user scope): `context7`, `filesystem`,
+  `serena`; `exa`/`github` appear when their env keys are set. For
+  symbol-level code questions — find references/call sites, go to
+  definition, hover types, post-edit diagnostics — prefer serena's
+  tools over `grep`/`rg`; text search stays right for strings, config
+  keys, and broad discovery.
 
 If a needed tool is missing, `sudo apt-get install <pkg>` or use a
 language-specific installer; `sudo` is passwordless for the `claude`
