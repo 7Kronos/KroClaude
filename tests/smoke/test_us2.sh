@@ -59,7 +59,9 @@ in_ctn 'test -f /home/claude/.claude/settings.json' || fail "settings.json not s
 in_ctn 'test -f /home/claude/.claude/CLAUDE.md' || fail "CLAUDE.md not seeded"
 in_ctn 'test -f /home/claude/.codex/config.toml' || fail "codex config.toml not seeded"
 in_ctn 'test -f /home/claude/.codex/hooks.json'  || fail "codex hooks.json not seeded"
+in_ctn 'test -f /home/claude/.codex/AGENTS.md'   || fail "codex AGENTS.md not seeded"
 in_ctn 'test -f /home/claude/.gemini/settings.json' || fail "gemini settings.json not seeded"
+as_claude 'codex mcp list | grep -q context7' || fail "codex context7 MCP not registered"
 
 # ---------- Scenario 2: workspace persistence across down/up ----------
 log "Scenario 2 — workspace persistence across down/up"
@@ -114,6 +116,13 @@ expected=$(cat "$FIXTURE_SRC/SKILL.md")
 owner=$(in_ctn "stat -c '%U:%G' /home/claude/.claude/skills/$FIXTURE_NAME/SKILL.md")
 [ "$owner" = "claude:claude" ] \
     || fail "fixture skill ownership is '$owner', expected 'claude:claude'"
+
+# Skills also reflect into the agent-skills path codex reads.
+as_claude "test -f /home/claude/.agents/skills/$FIXTURE_NAME/SKILL.md" \
+    || fail "bundled fixture skill not reflected into ~/.agents/skills"
+agents_owner=$(in_ctn "stat -c '%U:%G' /home/claude/.agents/skills/$FIXTURE_NAME/SKILL.md")
+[ "$agents_owner" = "claude:claude" ] \
+    || fail "~/.agents/skills fixture ownership is '$agents_owner', expected 'claude:claude'"
 
 # ---------- Scenario 6: user-installed skill preserved across down/up (US2) ----------
 log "Scenario 6 (US2) — user-installed skill survives recreate"

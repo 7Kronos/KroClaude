@@ -89,6 +89,10 @@ merge_fragments() {
 
 # ---- Per-type reflection call sites (one line each — SC-003) ----
 reflect_dir     "$SOURCE_DIR/skills"        "$CONFIG_DIR/skills"
+# Codex (and anything else speaking the agent-skills standard) reads
+# user skills from ~/.agents/skills — same bundled set, same collision
+# semantics. Plugins are deliberately NOT mirrored; they are claude-only.
+reflect_dir     "$SOURCE_DIR/skills"        "$CLAUDE_HOME/.agents/skills"
 reflect_dir     "$SOURCE_DIR/agents"        "$CONFIG_DIR/agents"
 reflect_dir     "$SOURCE_DIR/plugins"       "$CONFIG_DIR/plugins"
 reflect_dir     "$SOURCE_DIR/commands"      "$CONFIG_DIR/commands"      md
