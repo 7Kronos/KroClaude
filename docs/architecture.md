@@ -28,7 +28,7 @@ first, weekly-changing last:
 5. **Third-party binaries** — everything in
    [`config/tools.json`](../config/tools.json), installed by
    [`scripts/install-tools.sh`](../scripts/install-tools.sh) in ONE
-   layer: s6-overlay, nats, supabase, kubectl, helm, k9s,
+   layer: s6-overlay, bun, nats, supabase, kubectl, helm, k9s,
    kubectx/kubens, stern, kind, herdr, rtk, OmniSharp. All pinned; no
    GitHub API calls at build time. Placed after the heavy layers so a
    version bump rebuilds only from here down.

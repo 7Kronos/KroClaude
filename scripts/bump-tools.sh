@@ -8,7 +8,8 @@
 # Version sources, per tool entry:
 #   version_url — plain-text endpoint returning the version (e.g. dl.k8s.io)
 #   repo        — GitHub releases/latest tag_name
-# Leading "v" is stripped; URL templates in tools.json re-add it where needed.
+# A tool's `tag_prefix` (e.g. bun's "bun-") and a leading "v" are stripped;
+# URL templates in tools.json re-add them where needed.
 #
 # Set GITHUB_TOKEN to raise the GitHub API rate limit (the weekly
 # .github/workflows/bump-tools.yml job passes the Actions token).
@@ -39,6 +40,8 @@ for tool in $(jq -r '.tools | keys_unsorted[]' "$MANIFEST"); do
         printf '%-12s SKIP (no repo/version_url)\n' "$tool"
         continue
     fi
+    tag_prefix=$(jq -r '.tag_prefix // ""' <<<"$spec")
+    [ -n "$tag_prefix" ] && latest=${latest#"$tag_prefix"}
     latest=${latest#v}
 
     if [ -z "$latest" ] || [ "$latest" = "null" ]; then

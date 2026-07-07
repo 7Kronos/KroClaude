@@ -19,7 +19,8 @@ rules.
 - AI CLIs: `claude` (you), `gemini`, `codex`.
 - Shell core: `git`, `gh`, `curl`, `wget`, `jq`, `rg`, `fd`, `tree`,
   `tmux`, `fzf`, `bat`, `htop`, `strace`, `lsof`, `ss`.
-- Build & languages: Node 24, Python 3, `build-essential`, `pkg-config`.
+- Build & languages: Node 24, Bun (`bun`/`bunx`), Python 3,
+  `build-essential`, `pkg-config`.
 - Python tooling: `pip`, `uv`, `pipx` (`uv tool install ...` /
   `pipx install ...` drop CLI tools into PATH without polluting
   system site-packages).

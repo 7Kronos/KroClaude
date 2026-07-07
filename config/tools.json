@@ -11,12 +11,15 @@
     "Fields:",
     "  repo        GitHub <owner>/<repo> — used by bump-tools.sh (releases/latest)",
     "  version_url alternative version source returning a bare/v-prefixed version",
+    "  tag_prefix  stripped from the release tag before the leading-v strip",
+    "              (e.g. bun tags releases as bun-v1.2.3)",
     "  version     pinned version, no leading v (REQUIRED for the build)",
     "  install     rootfs | bin | archive-bin | archive-share",
     "  arch        map from Docker TARGETARCH (amd64/arm64) to upstream's naming",
     "  urls        download URL templates; {version} and {arch} are substituted",
     "  member      (archive-bin) path of the binary inside the archive",
-    "  links       (archive-share) map of file-in-archive -> name in /usr/local/bin"
+    "  links       (archive-share) map of file-in-archive -> name in /usr/local/bin",
+    "  symlinks    extra names in /usr/local/bin symlinked to the tool binary"
   ],
   "tools": {
     "s6-overlay": {
@@ -30,6 +33,21 @@
       "urls": [
         "https://github.com/just-containers/s6-overlay/releases/download/v{version}/s6-overlay-noarch.tar.xz",
         "https://github.com/just-containers/s6-overlay/releases/download/v{version}/s6-overlay-{arch}.tar.xz"
+      ]
+    },
+    "bun": {
+      "repo": "oven-sh/bun",
+      "tag_prefix": "bun-",
+      "version": "1.3.14",
+      "install": "archive-bin",
+      "member": "bun-linux-{arch}/bun",
+      "symlinks": ["bunx"],
+      "arch": {
+        "amd64": "x64",
+        "arm64": "aarch64"
+      },
+      "urls": [
+        "https://github.com/oven-sh/bun/releases/download/bun-v{version}/bun-linux-{arch}.zip"
       ]
     },
     "nats": {

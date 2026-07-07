@@ -11,6 +11,8 @@
 #   bin           raw binary -> /usr/local/bin/<tool>
 #   archive-bin   extract `member` from zip/tar.gz -> /usr/local/bin/<tool>
 #   archive-share extract whole tree -> /usr/local/share/<tool>, symlink `links`
+# Any entry may declare `symlinks`: extra names in the bin dir pointing at
+# the tool's binary (e.g. bunx -> bun).
 #
 # Test hook: KROCLAUDE_TOOLS_PREFIX relocates all install paths (and is
 # where `rootfs` extracts), so the script can be exercised outside Docker.
@@ -91,6 +93,11 @@ for tool in "${TOOLS[@]}"; do
             ;;
         esac
     done < <(jq -r '.urls[]' <<<"$spec")
+
+    while IFS= read -r link; do
+        [ -n "$link" ] || continue
+        ln -sfn "$tool" "$BIN_DIR/$link"
+    done < <(jq -r '.symlinks // [] | .[]' <<<"$spec")
     rm -rf "$tmp"
 done
 
