@@ -8,6 +8,16 @@ Image tag versions are independent of the project constitution version.
 
 ## [Unreleased]
 
+### Added
+
+- **Env-driven NuGet source registration** (entrypoint stage 45): when
+  `NUGET_REGISTRY_USER` + `NUGET_REGISTRY_TOKEN` are set, a user-level
+  NuGet source named "GitHub" is (re)registered for the claude user on
+  every boot (URL override: `NUGET_REGISTRY_URL`). Replaces external
+  `docker exec … dotnet nuget update source` post-deployment hooks,
+  which NRE on fresh containers where the source doesn't exist yet and
+  target root's unpersisted config.
+
 ### Fixed
 
 - **Chromium pinned to 149.0.7827.196 (TEMPORARY)**: trixie-security's

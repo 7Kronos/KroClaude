@@ -72,6 +72,7 @@ and source [`entrypoint-lib.sh`](../scripts/entrypoint-lib.sh).
 | `20-git-identity.sh` | `GIT_USER_*` env → `~/.gitconfig`, `safe.directory` |
 | `30-reflect-config.sh` | Bundled customization reflection (below) |
 | `40-mcp.sh` | `claude mcp` user-scope registration (local config writes) |
+| `45-nuget.sh` | NuGet "GitHub" source from `NUGET_REGISTRY_*` env (local config write) |
 | `50-ssh.sh` | Host keys (once, persisted), `authorized_keys` (every boot from env) |
 | `60-environment.sh` | Renders `/etc/environment` from `config/environment.d/` |
 | `70-ownership.sh` | chown sweep over paths the stages touched |
