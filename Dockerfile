@@ -23,7 +23,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # ---------- System packages (FR-003) ----------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Shell core (xz-utils: install-tools.sh extracts s6-overlay .tar.xz)
-    git curl ca-certificates wget jq ripgrep fd-find unzip zip xz-utils tree tmux fzf bat sudo bubblewrap \
+    git curl ca-certificates wget jq ripgrep fd-find unzip zip xz-utils tree tmux fzf bat sudo bubblewrap uuid-runtime \
     # Shell ergonomics (cherry-picked from dotfiles/home.nix — starship
     # installed separately below since trixie's package is too old)
     zsh direnv zoxide eza btop git-delta lazygit \
