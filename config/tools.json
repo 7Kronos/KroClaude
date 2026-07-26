@@ -21,7 +21,7 @@
   "tools": {
     "s6-overlay": {
       "repo": "just-containers/s6-overlay",
-      "version": "3.2.3.0",
+      "version": "3.2.3.2",
       "install": "rootfs",
       "arch": {
         "amd64": "x86_64",
@@ -47,7 +47,7 @@
     },
     "supabase": {
       "repo": "supabase/cli",
-      "version": "2.109.0",
+      "version": "2.109.1",
       "install": "archive-bin",
       "member": "supabase",
       "arch": {
@@ -60,7 +60,7 @@
     },
     "kubectl": {
       "version_url": "https://dl.k8s.io/release/stable.txt",
-      "version": "1.36.2",
+      "version": "1.36.3",
       "install": "bin",
       "arch": {
         "amd64": "amd64",
@@ -72,7 +72,7 @@
     },
     "helm": {
       "repo": "helm/helm",
-      "version": "4.2.2",
+      "version": "4.2.3",
       "install": "archive-bin",
       "member": "linux-{arch}/helm",
       "arch": {
@@ -149,7 +149,7 @@
     },
     "herdr": {
       "repo": "ogulcancelik/herdr",
-      "version": "0.7.1",
+      "version": "0.7.5",
       "install": "bin",
       "arch": {
         "amd64": "x86_64",
