@@ -261,7 +261,7 @@ RUN chmod +x /usr/local/bin/install-tools.sh && \
 COPY s6-overlay/s6-rc.d/xvfb/type /etc/s6-overlay/s6-rc.d/xvfb/type
 COPY s6-overlay/s6-rc.d/xvfb/run  /etc/s6-overlay/s6-rc.d/xvfb/run
 RUN chmod +x /etc/s6-overlay/s6-rc.d/xvfb/run && \
-    touch /etc/s6-overlay/s6-rc.d/user/contents.d/xvfb
+    touch /etc/s6-overlay/user-bundles.d/user/contents.d/xvfb
 
 # ---------- SSH server (feature 003-ssh-access) ----------
 # Hardened sshd config (key-only, claude-only, Mozilla "modern" crypto).
@@ -270,7 +270,7 @@ COPY scripts/sshd_config_kroclaude    /etc/ssh/sshd_config_kroclaude
 COPY s6-overlay/s6-rc.d/sshd/type     /etc/s6-overlay/s6-rc.d/sshd/type
 COPY s6-overlay/s6-rc.d/sshd/run      /etc/s6-overlay/s6-rc.d/sshd/run
 RUN chmod +x /etc/s6-overlay/s6-rc.d/sshd/run && \
-    touch /etc/s6-overlay/s6-rc.d/user/contents.d/sshd
+    touch /etc/s6-overlay/user-bundles.d/user/contents.d/sshd
 
 # ---------- Helper scripts, entrypoint stages, merge filters ----------
 # entrypoint.sh is a ~20-line driver; the actual boot logic lives in
