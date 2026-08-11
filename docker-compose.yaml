@@ -96,7 +96,7 @@ services:
   # `privileged: true` is on dind only; the kroclaude container itself
   # stays unprivileged.
   dind:
-    image: docker:27-dind
+    image: docker:28-dind
     container_name: kroclaude-dind
     restart: unless-stopped
     privileged: true
