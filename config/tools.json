@@ -47,7 +47,7 @@
     },
     "supabase": {
       "repo": "supabase/cli",
-      "version": "2.109.1",
+      "version": "2.116.0",
       "install": "archive-bin",
       "member": "supabase",
       "arch": {
@@ -60,7 +60,7 @@
     },
     "kubectl": {
       "version_url": "https://dl.k8s.io/release/stable.txt",
-      "version": "1.36.3",
+      "version": "1.37.0",
       "install": "bin",
       "arch": {
         "amd64": "amd64",
@@ -72,7 +72,7 @@
     },
     "helm": {
       "repo": "helm/helm",
-      "version": "4.2.3",
+      "version": "4.2.4",
       "install": "archive-bin",
       "member": "linux-{arch}/helm",
       "arch": {
@@ -137,7 +137,7 @@
     },
     "kind": {
       "repo": "kubernetes-sigs/kind",
-      "version": "0.32.0",
+      "version": "0.33.0",
       "install": "bin",
       "arch": {
         "amd64": "amd64",
@@ -149,7 +149,7 @@
     },
     "herdr": {
       "repo": "ogulcancelik/herdr",
-      "version": "0.7.5",
+      "version": "0.8.2",
       "install": "bin",
       "arch": {
         "amd64": "x86_64",
@@ -161,7 +161,7 @@
     },
     "rtk": {
       "repo": "rtk-ai/rtk",
-      "version": "0.43.0",
+      "version": "0.47.0",
       "install": "archive-bin",
       "member": "rtk",
       "arch": {
